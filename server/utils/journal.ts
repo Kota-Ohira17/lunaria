@@ -21,8 +21,6 @@ export interface JournalLine {
 export interface Journal {
   /** 並べ替え・画面の key（e12 / i3 / r5 / m2） */
   key: string
-  /** 締めた期に入る仕訳か（取り消せない） */
-  locked: boolean
   date: string
   source: 'execution' | 'income' | 'opening' | 'transfer' | 'adjust' | 'manual'
   /** 執行・収入の番号（E-001・I-001） */
@@ -176,7 +174,7 @@ const signature = (rows: { postingDate: string, account: string, debit: number, 
  * 記録を変えたあとに呼ぶ。今の仕訳が⑬の有効な行と違えば、もとの行を取り消して（貸借を入れ替えた行を足して）新しい行を足す。
  * 同じなら何もしない。款の名前が変わっただけでは呼ばないので、確定した仕訳の科目はあとから変わらない。
  */
-export async function syncVoucher(type: SourceType, id: number, createdBy = SYSTEM_USER, options: { skipClosed?: boolean } = {}) {
+export async function syncVoucher(type: SourceType, id: number, createdBy = SYSTEM_USER) {
   const db = useDb()
   const g = schema.glEntries
   const where = and(eq(g.voucherType, type), eq(g.voucherId, id), eq(g.isCancelled, false))
@@ -187,13 +185,6 @@ export async function syncVoucher(type: SourceType, id: number, createdBy = SYST
   const now = new Date()
   const next = posting ? glRows(posting, createdBy, now) : []
   if (signature(active) === signature(next)) return
-  // 締めた期に入る仕訳は変えない（画面からの操作は先に assertVoucherOpen で止める。自動の付け替えは skipClosed で見送る）
-  const periods = await closedPeriods()
-  if ([...active.map(a => a.postingDate), ...next.map(n => n.postingDate)].some(d => closedPeriodOf(d, periods))) {
-    if (options.skipClosed) return
-    await assertPeriodsOpen([...active.map(a => a.postingDate), ...next.map(n => n.postingDate)], periods)
-  }
-  if (posting) await ensureAccounts(posting.lines, type)
   const statements = [
     ...(active.length ? [db.update(g).set({ isCancelled: true }).where(where)] : []),
     ...(active.length
@@ -206,22 +197,19 @@ export async function syncVoucher(type: SourceType, id: number, createdBy = SYST
 
 /**
  * 仕訳を手で入れる（⑬に直接書く）。番号は counters の journal から払い出す。
- * 科目は⑭にある使う科目だけ。区分は科目のもの。締めた期の日付には入れられない。
+ * ⑬ですでに使っている科目は、同じ区分でしか使えない（科目名の揺れや区分の食い違いを防ぐ）。
  */
 export async function postManualJournal(input: { date: string, memo: string, lines: JournalLine[] }, createdBy: string) {
-  await assertPeriodsOpen([input.date])
+  const g = schema.glEntries
   const names = [...new Set(input.lines.map(l => l.account))]
-  const found = await useDb().select().from(schema.accounts).where(inArray(schema.accounts.name, names))
-  const byName = new Map(found.map(a => [a.name, a]))
-  const unknown = names.filter(n => !byName.has(n))
-  if (unknown.length) throw createError({ statusCode: 400, message: `勘定科目にない科目です：${unknown.join('、')}。先に「勘定科目」で足してください。` })
-  const disabled = names.filter(n => byName.get(n)!.disabled)
-  if (disabled.length) throw createError({ statusCode: 400, message: `使わない設定の科目です：${disabled.join('、')}` })
-  const id = await nextNumber('journal')
-  const posting: Posting = {
-    type: 'manual', id, no: '', subtype: '', date: input.date, memo: input.memo, bureau: '', team: '',
-    lines: input.lines.map(l => ({ ...l, kind: byName.get(l.account)!.kind })),
+  const used = await useDb().selectDistinct({ account: g.account, kind: g.accountKind }).from(g).where(inArray(g.account, names))
+  const conflicts = input.lines.filter(l => used.some(u => u.account === l.account && u.kind !== l.kind))
+  if (conflicts.length) {
+    const list = [...new Set(conflicts.map(l => `「${l.account}」は${used.find(u => u.account === l.account)!.kind}`))]
+    throw createError({ statusCode: 400, message: `すでに使っている科目と区分が違います：${list.join('、')}の科目です。` })
   }
+  const id = await nextNumber('journal')
+  const posting: Posting = { type: 'manual', id, no: '', subtype: '', date: input.date, memo: input.memo, bureau: '', team: '', lines: input.lines }
   await useDb().insert(schema.glEntries).values(glRows(posting, createdBy, new Date()))
   return { id, date: posting.date, memo: posting.memo, lines: posting.lines }
 }
@@ -233,7 +221,6 @@ export async function cancelManualJournal(id: number, createdBy: string) {
   const where = and(eq(g.voucherType, 'manual'), eq(g.voucherId, id), eq(g.isCancelled, false))
   const active = await db.select().from(g).where(where).orderBy(asc(g.lineNo))
   if (!active.length) throw createError({ statusCode: 404, message: '仕訳が見つかりません。' })
-  await assertPeriodsOpen([...new Set(active.map(a => a.postingDate))])
   const now = new Date()
   await db.batch([
     db.update(g).set({ isCancelled: true }).where(where),
@@ -249,13 +236,12 @@ export async function cancelManualJournal(id: number, createdBy: string) {
 async function reconcileLedger() {
   const db = useDb()
   const g = schema.glEntries
-  const [done, incomes, records, kanOf, active, periods] = await Promise.all([
+  const [done, incomes, records, kanOf, active] = await Promise.all([
     db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).then(withItems),
     db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')),
     db.select().from(schema.cashbookRecords),
     kanOfLines(),
-    db.selectDistinct({ type: g.voucherType, id: g.voucherId, date: g.postingDate }).from(g).where(eq(g.isCancelled, false)),
-    closedPeriods(),
+    db.selectDistinct({ type: g.voucherType, id: g.voucherId }).from(g).where(eq(g.isCancelled, false)),
   ])
   const postings = [
     ...done.map(e => postingOfEntry(e, kanOf)),
@@ -266,34 +252,23 @@ async function reconcileLedger() {
   const posted = new Set(active.map(a => keyOf(a.type, a.id)))
   const wanted = new Set(postings.map(p => keyOf(p.type, p.id)))
   const now = new Date()
-  // 締めた期に入るものはそろえない（締めたときの帳簿のまま）
-  const lacking = postings.filter(p => !posted.has(keyOf(p.type, p.id)) && !closedPeriodOf(p.date, periods))
-  for (const type of ['execution', 'income', 'cashbook'] as const) {
-    await ensureAccounts(lacking.filter(p => p.type === type).flatMap(p => p.lines), type)
-  }
-  await ensureAccounts(Object.entries(SYSTEM_ACCOUNTS).map(([account, kind]) => ({ account, kind })), 'cashbook')
-  await ensureAccounts(Object.values(CASH_ACCOUNT_TITLES).map(account => ({ account, kind: '資産' as const })), 'cashbook')
-  const missing = lacking.flatMap(p => glRows(p, SYSTEM_USER, now))
+  const missing = postings.filter(p => !posted.has(keyOf(p.type, p.id))).flatMap(p => glRows(p, SYSTEM_USER, now))
   for (let i = 0; i < missing.length; i += 100) await db.insert(g).values(missing.slice(i, i + 100)).onConflictDoNothing()
   // 手入力の仕訳は⑬そのものが記録なので、そろえる相手がない
   for (const a of active) {
-    if (a.type !== 'manual' && !wanted.has(keyOf(a.type, a.id))) await syncVoucher(a.type, a.id, SYSTEM_USER, { skipClosed: true })
+    if (a.type !== 'manual' && !wanted.has(keyOf(a.type, a.id))) await syncVoucher(a.type, a.id)
   }
 }
 
 export async function buildJournals() {
   await reconcileLedger()
   const g = schema.glEntries
-  const [rows, periods] = await Promise.all([
-    useDb().select().from(g).where(eq(g.isCancelled, false)).orderBy(asc(g.voucherType), asc(g.voucherId), asc(g.lineNo)),
-    closedPeriods(),
-  ])
+  const rows = await useDb().select().from(g).where(eq(g.isCancelled, false)).orderBy(asc(g.voucherType), asc(g.voucherId), asc(g.lineNo))
   const groups = Map.groupBy(rows, r => `${KEY_PREFIX[r.voucherType]}${r.voucherId}`)
   const journals: Journal[] = [...groups].map(([key, list]) => {
     const r = list[0]!
     return {
       key,
-      locked: !!closedPeriodOf(r.postingDate, periods),
       date: r.postingDate,
       source: (r.voucherType === 'cashbook' ? r.voucherSubtype : r.voucherType) as Journal['source'],
       seq: r.voucherNo || null,
@@ -314,8 +289,7 @@ export const isDebitKind = (kind: AccountKind) => kind === '資産' || kind === 
  * 元帳は科目ごとの行と残高（資産・支出は借方−貸方、負債・純資産・収入は貸方−借方）、試算表は科目ごとの借方・貸方の合計と残高。
  */
 export async function buildLedger() {
-  const [journals, accountRows] = await Promise.all([buildJournals(), useDb().select().from(schema.accounts)])
-  const numberOf = new Map(accountRows.map(a => [a.name, a.number]))
+  const journals = await buildJournals()
   const accounts = new Map<string, { account: string, kind: AccountKind, debit: number, credit: number, rows: { key: string, date: string, memo: string, seq: string | null, debit: number, credit: number, balance: number }[] }>()
   for (const j of journals) {
     for (const l of j.lines) {
@@ -329,11 +303,8 @@ export async function buildLedger() {
   }
   const order = ['資産', '負債', '純資産', '収入', '支出']
   const ledger = [...accounts.values()]
-    .map(a => ({ ...a, number: numberOf.get(a.account) ?? '', balance: isDebitKind(a.kind) ? a.debit - a.credit : a.credit - a.debit }))
-    // 区分 → 科目番号（番号のある科目が先） → 名前 の順
-    .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind)
-      || (a.number ? 0 : 1) - (b.number ? 0 : 1) || a.number.localeCompare(b.number, undefined, { numeric: true })
-      || a.account.localeCompare(b.account, 'ja'))
+    .map(a => ({ ...a, balance: isDebitKind(a.kind) ? a.debit - a.credit : a.credit - a.debit }))
+    .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.account.localeCompare(b.account, 'ja'))
   const totals = { debit: ledger.reduce((s, a) => s + a.debit, 0), credit: ledger.reduce((s, a) => s + a.credit, 0) }
   return { journals, ledger, totals }
 }
