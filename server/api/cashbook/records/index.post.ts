@@ -4,6 +4,8 @@ import { cashbookRecordSchema } from '../../../../shared/schemas'
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'manageCashbook')
   const input = parseOr400(cashbookRecordSchema.safeParse(await readBody(event)))
+  // 残高の照合は仕訳にならないので、締めた期でも書ける
+  if (input.kind !== 'check') await assertPeriodsOpen([input.date])
   const [record] = await useDb().insert(schema.cashbookRecords).values({
     kind: input.kind,
     date: input.date,

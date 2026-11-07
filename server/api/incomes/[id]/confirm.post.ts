@@ -6,6 +6,9 @@ export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'executeEntries')
   const id = Number(getRouterParam(event, 'id'))
   const { done } = parseOr400(incomeConfirmSchema.safeParse(await readBody(event)))
+  const income = await useDb().query.incomeRecords.findFirst({ where: eq(schema.incomeRecords.id, id) })
+  if (!income) throw createError({ statusCode: 404, message: '収入の記録が見つかりません。' })
+  await assertVoucherOpen('income', id, done ? [income.receivedOn] : [])
   const [updated] = await useDb().update(schema.incomeRecords)
     .set(done
       ? { status: 'done', confirmedAt: new Date(), confirmedBy: user.email }

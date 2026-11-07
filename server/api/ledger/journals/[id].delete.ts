@@ -4,6 +4,7 @@ import { eq } from 'drizzle-orm'
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'manageCashbook')
   const id = Number(getRouterParam(event, 'id'))
+  await assertVoucherOpen('manual', id)
   const [deleted] = await useDb().delete(schema.manualJournals).where(eq(schema.manualJournals.id, id)).returning()
   if (!deleted) throw createError({ statusCode: 404, message: '仕訳が見つかりません。' })
   await syncVoucher('manual', id, user.email)

@@ -286,6 +286,42 @@ export const glEntries = sqliteTable('gl_entries', {
 export type GlEntry = typeof glEntries.$inferSelect
 
 /**
+ * ⑭勘定科目DB（ERPNext の Account にならう）。⑬の account はここの name を指す。
+ * 口座・繰越などの科目と、予算の款の科目は、仕訳を作るときに自動で足す。手入力の仕訳は、ここにある科目から選ぶ。
+ */
+export const ACCOUNT_ORIGINS = ['cash', 'budget', 'system', 'manual'] as const
+export const accounts = sqliteTable('accounts', {
+  name: text('name').primaryKey(),
+  /** 区分（資産・負債・純資産・収入・支出）。ERPNext の root_type */
+  kind: text('kind').$type<AccountKind>().notNull(),
+  /** 科目番号（並び順に使う。空でもよい） */
+  number: text('number').notNull().default(''),
+  /** cash＝口座、budget＝予算の款、system＝繰越・雑収入など、manual＝手で足した科目 */
+  origin: text('origin', { enum: ACCOUNT_ORIGINS }).notNull().default('manual'),
+  /** 使わなくなった科目（手入力の仕訳で選べなくなる。帳簿には出る） */
+  disabled: integer('disabled', { mode: 'boolean' }).notNull().default(false),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+export type Account = typeof accounts.$inferSelect
+
+/**
+ * ⑮会計期間DB（ERPNext の Accounting Period にならう）。
+ * 締めた期（closed_at がある期）に日付が入る仕訳は、足すことも取り消すこともできない。
+ */
+export const accountingPeriods = sqliteTable('accounting_periods', {
+  id: integer('id').primaryKey({ autoIncrement: true }),
+  name: text('name').notNull(),
+  /** 期の初日と最終日（YYYY-MM-DD。両端を含む） */
+  startDate: text('start_date').notNull(),
+  endDate: text('end_date').notNull(),
+  closedAt: integer('closed_at', { mode: 'timestamp_ms' }),
+  closedBy: text('closed_by'),
+  createdBy: text('created_by').notNull(),
+  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
+})
+export type AccountingPeriod = typeof accountingPeriods.$inferSelect
+
+/**
  * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
  * 環境変数 NUXT_ADMIN_EMAILS のユーザーはログインのたびに管理者に戻る（最初の管理者を作るため）。
  */

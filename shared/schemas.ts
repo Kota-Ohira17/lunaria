@@ -235,6 +235,25 @@ export const manualJournalSchema = z.object({
 })
 export type ManualJournalInput = z.input<typeof manualJournalSchema>
 
+/** 勘定科目を足す（財務局長・管理者） */
+export const accountSchema = z.object({
+  name: required('勘定科目名').pipe(z.string().max(50)),
+  kind: z.enum(ACCOUNT_KINDS, { error: '区分を選んでください。' }),
+  number: z.string().trim().max(20).default(''),
+})
+/** 勘定科目を直す。区分は仕訳で使う前だけ変えられる */
+export const accountUpdateSchema = z.object({
+  kind: z.enum(ACCOUNT_KINDS).optional(),
+  number: z.string().trim().max(20).optional(),
+  disabled: z.boolean().optional(),
+})
+/** 会計期間を足す */
+export const periodSchema = z.object({
+  name: required('期の名前').pipe(z.string().max(50)),
+  startDate: date,
+  endDate: date,
+}).refine(v => v.startDate <= v.endDate, { message: '最終日は初日より後にしてください。', path: ['endDate'] })
+
 export const evidenceUploadSchema = z.object({
   kind: z.enum(EVIDENCE_KINDS, { error: '証憑の種類を選んでください。' }),
   amount: z.union([z.literal(''), yen]).default(''),
