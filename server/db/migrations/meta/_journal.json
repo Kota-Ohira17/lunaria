@@ -267,6 +267,20 @@
       "when": 1793959356738,
       "tag": "0037_income_budget_items",
       "breakpoints": true
+    },
+    {
+      "idx": 38,
+      "version": "6",
+      "when": 1794013214924,
+      "tag": "0038_gl_entries",
+      "breakpoints": true
+    },
+    {
+      "idx": 39,
+      "version": "6",
+      "when": 1794067488822,
+      "tag": "0039_accounts_and_periods",
+      "breakpoints": true
     }
   ]
 }

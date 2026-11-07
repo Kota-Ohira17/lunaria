@@ -106,5 +106,6 @@ export async function settlePreExecutions(lines: (ParsedBudgetLine & { itemId: s
           })]
         : []),
     ])
+    await syncVoucher('execution', entry.id, undefined, { skipClosed: true })
   }
 }

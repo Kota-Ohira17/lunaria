@@ -12,11 +12,13 @@ export default defineEventHandler(async (event) => {
   if (!staff && (income.applicantEmail !== user.email || income.status !== 'pending')) {
     throw createError({ statusCode: 403, message: '取り消せるのは、確認待ちの間の記録した本人と、財務局長・管理者です。' })
   }
+  await assertVoucherOpen('income', id)
   const files = await db.select().from(schema.incomeFiles).where(eq(schema.incomeFiles.incomeId, id))
   await db.batch([
     db.delete(schema.incomeFiles).where(eq(schema.incomeFiles.incomeId, id)),
     db.delete(schema.attachments).where(inArray(schema.attachments.id, files.length ? files.map(f => f.attachmentId) : [-1])),
     db.delete(schema.incomeRecords).where(eq(schema.incomeRecords.id, id)),
   ])
+  await syncVoucher('income', id, user.email)
   return { ok: true }
 })

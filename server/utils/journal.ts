@@ -1,11 +1,12 @@
-import { asc, eq } from 'drizzle-orm'
+import { and, asc, eq } from 'drizzle-orm'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNT_TITLES } from '../../shared/constants'
 import { accountOfIncome, accountOfPayment } from '../../shared/cashbook'
+import type { GlEntry } from '../db/schema'
 
 /**
- * 複式簿記の帳簿（現金主義：お金が動いたときに仕訳する）。
- * 執行済みの申請・確認済みの収入・出納帳の記録（期首の残高・移動・調整）から仕訳を作り、手で入れた仕訳を足す。
+ * 複式簿記の帳簿（現金主義：お金が動いたときに仕訳する）。仕訳は⑬総勘定元帳DBに確定して持つ（ERPNext の GL Entry にならう）。
+ * 執行済みの申請・確認済みの収入・出納帳の記録（期首の残高・移動・調整）・手で入れた仕訳から行を作る。
  * 収入・支出の科目は予算の款。口座は「普通預金（SMBC）」などの資産の科目。
  * 口座や金額が決まらない執行・収入は仕訳に入れない（出納帳の「出納帳に入っていない記録」と同じ）。
  */
@@ -20,6 +21,8 @@ export interface JournalLine {
 export interface Journal {
   /** 並べ替え・画面の key（e12 / i3 / r5 / m2） */
   key: string
+  /** 締めた期に入る仕訳か（取り消せない） */
+  locked: boolean
   date: string
   source: 'execution' | 'income' | 'opening' | 'transfer' | 'adjust' | 'manual'
   /** 執行・収入の番号（E-001・I-001） */
@@ -63,70 +66,212 @@ function merge(lines: JournalLine[]) {
 
 const pathKan = (details: unknown) => (details as { budgetPath?: { kan?: string } } | null)?.budgetPath?.kan?.trim() || ''
 
-export async function buildJournals() {
+type KanOf = Map<string, string>
+type VoucherType = GlEntry['voucherType']
+/** 1つの記録から作る仕訳 */
+interface Posting {
+  type: VoucherType
+  id: number
+  no: string
+  subtype: string
+  date: string
+  memo: string
+  bureau: string
+  team: string
+  lines: JournalLine[]
+}
+
+const KEY_PREFIX: Record<VoucherType, string> = { execution: 'e', income: 'i', cashbook: 'r', manual: 'm' }
+const SYSTEM_USER = 'system'
+
+async function kanOfLines(): Promise<KanOf> {
+  const rows = await useDb().select({ key: schema.budgetLines.key, kan: schema.budgetLines.kan }).from(schema.budgetLines)
+  return new Map(rows.map(l => [l.key, l.kan]))
+}
+
+/** 執行済みの申請の仕訳。口座や金額が決まらないものは作らない */
+function postingOfEntry(e: Awaited<ReturnType<typeof withItems>>[number], kanOf: KanOf): Posting | null {
+  if (e.status !== 'done') return null
+  const amount = executedAmount(e)
+  const account = accountOfPayment(e.paymentMethod)
+  if (!e.executedAt || amount == null || !account) return null
+  // 支出の科目は明細の款。明細ごとの執行額がすべて分かれば款ごとに分け、分からなければ最初の明細の款にまとめる
+  const fallback = e.items.length ? (kanOf.get(e.items[0]!.lineKey) || UNKNOWN_EXPENSE) : (pathKan(e.details) || (e.itemNumber === '予算前執行' ? '予算前執行' : UNKNOWN_EXPENSE))
+  const actuals = e.items.map(i => actualAmountOf(i, e))
+  const byItems = e.items.length > 0 && actuals.every(a => a != null) && actuals.reduce((s, a) => s + a!, 0) === amount
+  const expense = byItems
+    ? e.items.map((i, n) => debit(kanOf.get(i.lineKey) || fallback, '支出', actuals[n]!))
+    : [debit(fallback, '支出', amount)]
+  return {
+    type: 'execution', id: e.id, no: e.seq, subtype: '', date: dateInJapan(e.executedAt),
+    memo: `${e.itemName}（${e.department}/${e.inCharge}）`, bureau: e.department, team: e.inCharge,
+    lines: merge([...expense, credit(CASH_ACCOUNT_TITLES[account], '資産', amount)]),
+  }
+}
+
+/** 確認済みの収入の仕訳 */
+function postingOfIncome(i: typeof schema.incomeRecords.$inferSelect, kanOf: KanOf): Posting | null {
+  if (i.status !== 'done') return null
+  const account = accountOfIncome(i.method, i.account)
+  if (!account) return null
+  const kan = (i.lineKey && kanOf.get(i.lineKey)) || pathKan(i.details) || UNKNOWN_INCOME
+  return {
+    type: 'income', id: i.id, no: i.seq, subtype: '', date: i.receivedOn,
+    memo: `${i.itemName}${i.payer ? `（${i.payer}）` : ''}`, bureau: i.department, team: i.inCharge,
+    lines: [debit(CASH_ACCOUNT_TITLES[account], '資産', i.amount), credit(kan, '収入', i.amount)],
+  }
+}
+
+/** 出納帳の記録の仕訳（期首の残高・移動・調整。残高の照合は仕訳にしない） */
+function postingOfRecord(r: typeof schema.cashbookRecords.$inferSelect): Posting | null {
+  const base = { type: 'cashbook' as const, id: r.id, no: '', subtype: r.kind, date: r.date, bureau: '', team: '' }
+  const cash = CASH_ACCOUNT_TITLES[r.account]
+  if (r.kind === 'opening' && r.amount > 0) {
+    return { ...base, memo: r.memo || '期首の残高', lines: [debit(cash, '資産', r.amount), credit(OPENING, '純資産', r.amount)] }
+  }
+  if (r.kind === 'transfer' && r.toAccount) {
+    return { ...base, memo: `${r.account} → ${r.toAccount}${r.memo ? `（${r.memo}）` : ''}`, lines: [debit(CASH_ACCOUNT_TITLES[r.toAccount], '資産', r.amount), credit(cash, '資産', r.amount)] }
+  }
+  if (r.kind === 'adjust') {
+    return {
+      ...base, memo: r.memo,
+      lines: r.amount > 0
+        ? [debit(cash, '資産', r.amount), credit(ADJUST_GAIN, '収入', r.amount)]
+        : [debit(ADJUST_LOSS, '支出', -r.amount), credit(cash, '資産', -r.amount)],
+    }
+  }
+  return null
+}
+
+/** 手で入れた仕訳 */
+const postingOfManual = (m: typeof schema.manualJournals.$inferSelect): Posting => ({
+  type: 'manual', id: m.id, no: '', subtype: '', date: m.date, memo: m.memo, bureau: '', team: '', lines: m.lines,
+})
+
+/** 1つの記録の今の仕訳（仕訳にならないか、記録がなければ null） */
+async function postingOf(type: VoucherType, id: number): Promise<Posting | null> {
   const db = useDb()
-  const [done, incomes, records, manuals, budgetLines] = await Promise.all([
+  if (type === 'execution') {
+    const [e] = await db.select().from(schema.entries).where(eq(schema.entries.id, id)).then(withItems)
+    return e ? postingOfEntry(e, await kanOfLines()) : null
+  }
+  if (type === 'income') {
+    const [i] = await db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.id, id))
+    return i ? postingOfIncome(i, await kanOfLines()) : null
+  }
+  if (type === 'cashbook') {
+    const [r] = await db.select().from(schema.cashbookRecords).where(eq(schema.cashbookRecords.id, id))
+    return r ? postingOfRecord(r) : null
+  }
+  const [m] = await db.select().from(schema.manualJournals).where(eq(schema.manualJournals.id, id))
+  return m ? postingOfManual(m) : null
+}
+
+/** 仕訳を⑬の行にする */
+const glRows = (p: Posting, createdBy: string, createdAt: Date) => p.lines.map((l, n) => ({
+  postingDate: p.date, account: l.account, accountKind: l.kind, debit: l.debit, credit: l.credit,
+  voucherType: p.type, voucherId: p.id, voucherNo: p.no, voucherSubtype: p.subtype, lineNo: n,
+  remarks: p.memo, bureau: p.bureau, team: p.team, createdBy, createdAt,
+}))
+
+/** ⑬の有効な行と、今の仕訳が同じか */
+const signature = (rows: { postingDate: string, account: string, debit: number, credit: number, remarks: string, voucherNo: string }[]) =>
+  JSON.stringify(rows.map(r => [r.postingDate, r.account, r.debit, r.credit, r.remarks, r.voucherNo]))
+
+/**
+ * 記録を変えたあとに呼ぶ。今の仕訳が⑬の有効な行と違えば、もとの行を取り消して（貸借を入れ替えた行を足して）新しい行を足す。
+ * 同じなら何もしない。款の名前が変わっただけでは呼ばないので、確定した仕訳の科目はあとから変わらない。
+ */
+export async function syncVoucher(type: VoucherType, id: number, createdBy = SYSTEM_USER, options: { skipClosed?: boolean } = {}) {
+  const db = useDb()
+  const g = schema.glEntries
+  const where = and(eq(g.voucherType, type), eq(g.voucherId, id), eq(g.isCancelled, false))
+  const [posting, active] = await Promise.all([
+    postingOf(type, id),
+    db.select().from(g).where(where).orderBy(asc(g.lineNo)),
+  ])
+  const now = new Date()
+  const next = posting ? glRows(posting, createdBy, now) : []
+  if (signature(active) === signature(next)) return
+  // 締めた期に入る仕訳は変えない（画面からの操作は先に assertVoucherOpen で止める。自動の付け替えは skipClosed で見送る）
+  const periods = await closedPeriods()
+  if ([...active.map(a => a.postingDate), ...next.map(n => n.postingDate)].some(d => closedPeriodOf(d, periods))) {
+    if (options.skipClosed) return
+    await assertPeriodsOpen([...active.map(a => a.postingDate), ...next.map(n => n.postingDate)], periods)
+  }
+  if (posting) await ensureAccounts(posting.lines, type)
+  const statements = [
+    ...(active.length ? [db.update(g).set({ isCancelled: true }).where(where)] : []),
+    ...(active.length
+      ? [db.insert(g).values(active.map(({ id: _id, ...r }) => ({ ...r, debit: r.credit, credit: r.debit, isCancelled: true, createdBy, createdAt: now })))]
+      : []),
+    ...(next.length ? [db.insert(g).values(next).onConflictDoNothing()] : []),
+  ]
+  await db.batch(statements as [typeof statements[number], ...typeof statements])
+}
+
+/**
+ * 帳簿を読む前に、⑬と記録の抜けをそろえる。
+ * 仕訳があるのに⑬に行がない記録（この表を作る前の記録や、途中で失敗したもの）は足し、記録がなくなったのに⑬に残っている行は取り消す。
+ * 行がすでにある記録は変えない。
+ */
+async function reconcileLedger() {
+  const db = useDb()
+  const g = schema.glEntries
+  const [done, incomes, records, manuals, kanOf, active, periods] = await Promise.all([
     db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).then(withItems),
     db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')),
-    db.select().from(schema.cashbookRecords).orderBy(asc(schema.cashbookRecords.date), asc(schema.cashbookRecords.id)),
-    db.select().from(schema.manualJournals).orderBy(asc(schema.manualJournals.date), asc(schema.manualJournals.id)),
-    db.select({ key: schema.budgetLines.key, kan: schema.budgetLines.kan }).from(schema.budgetLines),
+    db.select().from(schema.cashbookRecords),
+    db.select().from(schema.manualJournals),
+    kanOfLines(),
+    db.selectDistinct({ type: g.voucherType, id: g.voucherId, date: g.postingDate }).from(g).where(eq(g.isCancelled, false)),
+    closedPeriods(),
   ])
-  const kanOf = new Map(budgetLines.map(l => [l.key, l.kan]))
-  const journals: Journal[] = []
-
-  for (const e of done) {
-    const amount = executedAmount(e)
-    const account = accountOfPayment(e.paymentMethod)
-    if (!e.executedAt || amount == null || !account) continue
-    // 支出の科目は明細の款。明細ごとの執行額がすべて分かれば款ごとに分け、分からなければ最初の明細の款にまとめる
-    const fallback = e.items.length ? (kanOf.get(e.items[0]!.lineKey) || UNKNOWN_EXPENSE) : (pathKan(e.details) || (e.itemNumber === '予算前執行' ? '予算前執行' : UNKNOWN_EXPENSE))
-    const actuals = e.items.map(i => actualAmountOf(i, e))
-    const byItems = e.items.length > 0 && actuals.every(a => a != null) && actuals.reduce((s, a) => s + a!, 0) === amount
-    const expense = byItems
-      ? e.items.map((i, n) => debit(kanOf.get(i.lineKey) || fallback, '支出', actuals[n]!))
-      : [debit(fallback, '支出', amount)]
-    journals.push({
-      key: `e${e.id}`, date: dateInJapan(e.executedAt), source: 'execution', seq: e.seq, manualId: null,
-      memo: `${e.itemName}（${e.department}/${e.inCharge}）`,
-      lines: merge([...expense, credit(CASH_ACCOUNT_TITLES[account], '資産', amount)]),
-    })
+  const postings = [
+    ...done.map(e => postingOfEntry(e, kanOf)),
+    ...incomes.map(i => postingOfIncome(i, kanOf)),
+    ...records.map(postingOfRecord),
+    ...manuals.map(postingOfManual),
+  ].filter((p): p is Posting => p != null)
+  const keyOf = (type: VoucherType, id: number) => `${type}:${id}`
+  const posted = new Set(active.map(a => keyOf(a.type, a.id)))
+  const wanted = new Set(postings.map(p => keyOf(p.type, p.id)))
+  const now = new Date()
+  // 締めた期に入るものはそろえない（締めたときの帳簿のまま）
+  const lacking = postings.filter(p => !posted.has(keyOf(p.type, p.id)) && !closedPeriodOf(p.date, periods))
+  for (const type of ['execution', 'income', 'cashbook', 'manual'] as const) {
+    await ensureAccounts(lacking.filter(p => p.type === type).flatMap(p => p.lines), type)
   }
-
-  for (const i of incomes) {
-    const account = accountOfIncome(i.method, i.account)
-    if (!account) continue
-    const kan = (i.lineKey && kanOf.get(i.lineKey)) || pathKan(i.details) || UNKNOWN_INCOME
-    journals.push({
-      key: `i${i.id}`, date: i.receivedOn, source: 'income', seq: i.seq, manualId: null,
-      memo: `${i.itemName}${i.payer ? `（${i.payer}）` : ''}`,
-      lines: [debit(CASH_ACCOUNT_TITLES[account], '資産', i.amount), credit(kan, '収入', i.amount)],
-    })
+  await ensureAccounts(Object.entries(SYSTEM_ACCOUNTS).map(([account, kind]) => ({ account, kind })), 'cashbook')
+  await ensureAccounts(Object.values(CASH_ACCOUNT_TITLES).map(account => ({ account, kind: '資産' as const })), 'cashbook')
+  const missing = lacking.flatMap(p => glRows(p, SYSTEM_USER, now))
+  for (let i = 0; i < missing.length; i += 100) await db.insert(g).values(missing.slice(i, i + 100)).onConflictDoNothing()
+  for (const a of active) {
+    if (!wanted.has(keyOf(a.type, a.id))) await syncVoucher(a.type, a.id, SYSTEM_USER, { skipClosed: true })
   }
+}
 
-  for (const r of records) {
-    const base = { key: `r${r.id}`, date: r.date, seq: null, manualId: null }
-    const cash = CASH_ACCOUNT_TITLES[r.account]
-    if (r.kind === 'opening' && r.amount > 0) {
-      journals.push({ ...base, source: 'opening', memo: r.memo || '期首の残高', lines: [debit(cash, '資産', r.amount), credit(OPENING, '純資産', r.amount)] })
+export async function buildJournals() {
+  await reconcileLedger()
+  const g = schema.glEntries
+  const [rows, periods] = await Promise.all([
+    useDb().select().from(g).where(eq(g.isCancelled, false)).orderBy(asc(g.voucherType), asc(g.voucherId), asc(g.lineNo)),
+    closedPeriods(),
+  ])
+  const groups = Map.groupBy(rows, r => `${KEY_PREFIX[r.voucherType]}${r.voucherId}`)
+  const journals: Journal[] = [...groups].map(([key, list]) => {
+    const r = list[0]!
+    return {
+      key,
+      locked: !!closedPeriodOf(r.postingDate, periods),
+      date: r.postingDate,
+      source: (r.voucherType === 'cashbook' ? r.voucherSubtype : r.voucherType) as Journal['source'],
+      seq: r.voucherNo || null,
+      manualId: r.voucherType === 'manual' ? r.voucherId : null,
+      memo: r.remarks,
+      lines: list.map(l => ({ account: l.account, kind: l.accountKind, debit: l.debit, credit: l.credit })),
     }
-    if (r.kind === 'transfer' && r.toAccount) {
-      journals.push({ ...base, source: 'transfer', memo: `${r.account} → ${r.toAccount}${r.memo ? `（${r.memo}）` : ''}`, lines: [debit(CASH_ACCOUNT_TITLES[r.toAccount], '資産', r.amount), credit(cash, '資産', r.amount)] })
-    }
-    if (r.kind === 'adjust') {
-      journals.push({
-        ...base, source: 'adjust', memo: r.memo,
-        lines: r.amount > 0
-          ? [debit(cash, '資産', r.amount), credit(ADJUST_GAIN, '収入', r.amount)]
-          : [debit(ADJUST_LOSS, '支出', -r.amount), credit(cash, '資産', -r.amount)],
-      })
-    }
-  }
-
-  for (const m of manuals) {
-    journals.push({ key: `m${m.id}`, date: m.date, source: 'manual', seq: null, manualId: m.id, memo: m.memo, lines: m.lines })
-  }
-
+  })
   journals.sort((a, b) => a.date.localeCompare(b.date) || ORDER[a.source] - ORDER[b.source] || a.key.localeCompare(b.key, undefined, { numeric: true }))
   return journals
 }
@@ -139,7 +284,8 @@ export const isDebitKind = (kind: AccountKind) => kind === '資産' || kind === 
  * 元帳は科目ごとの行と残高（資産・支出は借方−貸方、負債・純資産・収入は貸方−借方）、試算表は科目ごとの借方・貸方の合計と残高。
  */
 export async function buildLedger() {
-  const journals = await buildJournals()
+  const [journals, accountRows] = await Promise.all([buildJournals(), useDb().select().from(schema.accounts)])
+  const numberOf = new Map(accountRows.map(a => [a.name, a.number]))
   const accounts = new Map<string, { account: string, kind: AccountKind, debit: number, credit: number, rows: { key: string, date: string, memo: string, seq: string | null, debit: number, credit: number, balance: number }[] }>()
   for (const j of journals) {
     for (const l of j.lines) {
@@ -153,8 +299,11 @@ export async function buildLedger() {
   }
   const order = ['資産', '負債', '純資産', '収入', '支出']
   const ledger = [...accounts.values()]
-    .map(a => ({ ...a, balance: isDebitKind(a.kind) ? a.debit - a.credit : a.credit - a.debit }))
-    .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind) || a.account.localeCompare(b.account, 'ja'))
+    .map(a => ({ ...a, number: numberOf.get(a.account) ?? '', balance: isDebitKind(a.kind) ? a.debit - a.credit : a.credit - a.debit }))
+    // 区分 → 科目番号（番号のある科目が先） → 名前 の順
+    .sort((a, b) => order.indexOf(a.kind) - order.indexOf(b.kind)
+      || (a.number ? 0 : 1) - (b.number ? 0 : 1) || a.number.localeCompare(b.number, undefined, { numeric: true })
+      || a.account.localeCompare(b.account, 'ja'))
   const totals = { debit: ledger.reduce((s, a) => s + a.debit, 0), credit: ledger.reduce((s, a) => s + a.credit, 0) }
   return { journals, ledger, totals }
 }
