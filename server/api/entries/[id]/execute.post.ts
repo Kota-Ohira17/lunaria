@@ -3,7 +3,6 @@ import { executeSchema } from '../../../../shared/schemas'
 import type { Entry } from '../../../db/schema'
 
 function paymentMethodFor(entry: Entry, bank?: string) {
-  if (entry.kind === 'evidence') return '立替'
   switch (entry.type) {
     case '振込': return `振込（${bank}）`
     case '発注': return '口座引落'
@@ -27,7 +26,7 @@ export default defineEventHandler(async (event) => {
   const entry = await db.query.entries.findFirst({ where: eq(e.id, id) })
   if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
 
-  if (body.done && entry.kind === 'execution' && entry.type === '振込' && !body.bank) {
+  if (body.done && entry.type === '振込' && !body.bank) {
     throw createError({ statusCode: 400, message: '振込に使った口座を選んでください。' })
   }
 
@@ -46,7 +45,7 @@ export default defineEventHandler(async (event) => {
           status: 'pending',
           executedAt: null,
           executedBy: null,
-          paymentMethod: entry.kind === 'evidence' ? '立替' : null,
+          paymentMethod: null,
           // 執行待ちに戻したら、証憑の確認もやり直す
           evidenceCheckedAt: null,
           evidenceCheckedBy: null,

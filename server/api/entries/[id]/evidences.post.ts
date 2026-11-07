@@ -17,7 +17,6 @@ export default defineEventHandler(async (event) => {
   const db = useDb()
   const entry = await db.query.entries.findFirst({ where: eq(schema.entries.id, id) })
   if (!entry || !canSeeEntry(user, entry)) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
-  if (entry.kind !== 'execution') throw createError({ statusCode: 400, message: 'この申請には証憑を付けられません。' })
 
   const amount = input.amount === '' ? null : input.amount
   // 日付が空なら、立替以外は執行日（ZAI が執行済み）、それもなければ今日

@@ -100,13 +100,13 @@ export async function nextNumber(name: string) {
 }
 
 /** 通し番号を原子的に払い出す（旧GASの ScriptProperties カウンタの置き換え） */
-export async function nextSeq(kind: 'execution' | 'evidence' | 'income') {
+export async function nextSeq(kind: 'execution' | 'income') {
   const [row] = await useDb()
     .insert(schema.counters)
     .values({ name: kind, value: 1 })
     .onConflictDoUpdate({ target: schema.counters.name, set: { value: sql`${schema.counters.value} + 1` } })
     .returning({ value: schema.counters.value })
-  const prefix = kind === 'execution' ? 'E' : kind === 'income' ? 'I' : 'R'
+  const prefix = kind === 'execution' ? 'E' : 'I'
   return `${prefix}-${String(row!.value).padStart(3, '0')}`
 }
 

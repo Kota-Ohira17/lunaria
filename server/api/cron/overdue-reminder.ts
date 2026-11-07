@@ -6,7 +6,7 @@ import { shortenItemNumbers } from '../../../shared/itemNumbers'
  * 1日1回、n8n のスケジュールか Vercel の Cron から呼ぶ（README 参照）。
  * - 認証: 合言葉（NUXT_CRON_SECRET、または Vercel の CRON_SECRET）を
  *   「Authorization: Bearer 合言葉」か「X-Cron-Secret: 合言葉」で送る。合言葉が未設定なら使えない（404）
- * - 期限切れ: 期限の日付が今日（日本時間）より前。以前の証憑提出フォームの申請（R-）は対象外
+ * - 期限切れ: 期限の日付が今日（日本時間）より前
  * - ?dryRun=1 なら Slack には送らず、送る予定の内容だけ返す
  */
 export default defineEventHandler(async (event) => {

@@ -10,7 +10,7 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
  * 口座情報は入れない。
  */
 export function dmTextOf(event: NotifyEvent, entry: Entry) {
-  const name = entry.kind === 'evidence' ? '証憑提出' : '執行依頼'
+  const name = '執行依頼'
   const lines = event === 'created'
     ? [`${name}を受け付けました（受付番号 ${entry.seq}）。`]
     : [`${name} ${entry.seq} が対応済みになりました。`]

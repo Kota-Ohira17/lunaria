@@ -24,9 +24,10 @@ export const attachments = sqliteTable('attachments', {
  */
 export const entries = sqliteTable('entries', {
   id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 表示用の通し番号（執行依頼: E-001 / 証憑: R-001） */
+  /** 表示用の通し番号（E-001。以前の証憑提出フォームから移した申請は R-001 のまま） */
   seq: text('seq').notNull().unique(),
-  kind: text('kind', { enum: ['execution', 'evidence'] }).notNull(),
+  /** 申請の種類（執行依頼だけ。以前の証憑提出フォームの申請も執行依頼に移した） */
+  kind: text('kind', { enum: ['execution'] }).notNull(),
   type: text('type', { enum: PAYMENT_TYPES }).notNull(),
   status: text('status', { enum: ['pending', 'done'] }).notNull().default('pending'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
