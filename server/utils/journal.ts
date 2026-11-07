@@ -1,4 +1,4 @@
-import { and, asc, eq } from 'drizzle-orm'
+import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNT_TITLES } from '../../shared/constants'
 import { accountOfIncome, accountOfPayment } from '../../shared/cashbook'
@@ -6,7 +6,7 @@ import type { GlEntry } from '../db/schema'
 
 /**
  * 複式簿記の帳簿（現金主義：お金が動いたときに仕訳する）。仕訳は⑬総勘定元帳DBに確定して持つ（ERPNext の GL Entry にならう）。
- * 執行済みの申請・確認済みの収入・出納帳の記録（期首の残高・移動・調整）・手で入れた仕訳から行を作る。
+ * 執行済みの申請・確認済みの収入・出納帳の記録（期首の残高・移動・調整）から行を作り、手で入れた仕訳は⑬に直接書く。
  * 収入・支出の科目は予算の款。口座は「普通預金（SMBC）」などの資産の科目。
  * 口座や金額が決まらない執行・収入は仕訳に入れない（出納帳の「出納帳に入っていない記録」と同じ）。
  */
@@ -143,13 +143,11 @@ function postingOfRecord(r: typeof schema.cashbookRecords.$inferSelect): Posting
   return null
 }
 
-/** 手で入れた仕訳 */
-const postingOfManual = (m: typeof schema.manualJournals.$inferSelect): Posting => ({
-  type: 'manual', id: m.id, no: '', subtype: '', date: m.date, memo: m.memo, bureau: '', team: '', lines: m.lines,
-})
+/** もとの記録がある種類（手入力の仕訳は⑬に直接書くので、もとの記録がない） */
+type SourceType = Exclude<VoucherType, 'manual'>
 
 /** 1つの記録の今の仕訳（仕訳にならないか、記録がなければ null） */
-async function postingOf(type: VoucherType, id: number): Promise<Posting | null> {
+async function postingOf(type: SourceType, id: number): Promise<Posting | null> {
   const db = useDb()
   if (type === 'execution') {
     const [e] = await db.select().from(schema.entries).where(eq(schema.entries.id, id)).then(withItems)
@@ -159,12 +157,8 @@ async function postingOf(type: VoucherType, id: number): Promise<Posting | null>
     const [i] = await db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.id, id))
     return i ? postingOfIncome(i, await kanOfLines()) : null
   }
-  if (type === 'cashbook') {
-    const [r] = await db.select().from(schema.cashbookRecords).where(eq(schema.cashbookRecords.id, id))
-    return r ? postingOfRecord(r) : null
-  }
-  const [m] = await db.select().from(schema.manualJournals).where(eq(schema.manualJournals.id, id))
-  return m ? postingOfManual(m) : null
+  const [r] = await db.select().from(schema.cashbookRecords).where(eq(schema.cashbookRecords.id, id))
+  return r ? postingOfRecord(r) : null
 }
 
 /** 仕訳を⑬の行にする */
@@ -182,7 +176,7 @@ const signature = (rows: { postingDate: string, account: string, debit: number, 
  * 記録を変えたあとに呼ぶ。今の仕訳が⑬の有効な行と違えば、もとの行を取り消して（貸借を入れ替えた行を足して）新しい行を足す。
  * 同じなら何もしない。款の名前が変わっただけでは呼ばないので、確定した仕訳の科目はあとから変わらない。
  */
-export async function syncVoucher(type: VoucherType, id: number, createdBy = SYSTEM_USER, options: { skipClosed?: boolean } = {}) {
+export async function syncVoucher(type: SourceType, id: number, createdBy = SYSTEM_USER, options: { skipClosed?: boolean } = {}) {
   const db = useDb()
   const g = schema.glEntries
   const where = and(eq(g.voucherType, type), eq(g.voucherId, id), eq(g.isCancelled, false))
@@ -211,6 +205,43 @@ export async function syncVoucher(type: VoucherType, id: number, createdBy = SYS
 }
 
 /**
+ * 仕訳を手で入れる（⑬に直接書く）。番号は counters の journal から払い出す。
+ * 科目は⑭にある使う科目だけ。区分は科目のもの。締めた期の日付には入れられない。
+ */
+export async function postManualJournal(input: { date: string, memo: string, lines: JournalLine[] }, createdBy: string) {
+  await assertPeriodsOpen([input.date])
+  const names = [...new Set(input.lines.map(l => l.account))]
+  const found = await useDb().select().from(schema.accounts).where(inArray(schema.accounts.name, names))
+  const byName = new Map(found.map(a => [a.name, a]))
+  const unknown = names.filter(n => !byName.has(n))
+  if (unknown.length) throw createError({ statusCode: 400, message: `勘定科目にない科目です：${unknown.join('、')}。先に「勘定科目」で足してください。` })
+  const disabled = names.filter(n => byName.get(n)!.disabled)
+  if (disabled.length) throw createError({ statusCode: 400, message: `使わない設定の科目です：${disabled.join('、')}` })
+  const id = await nextNumber('journal')
+  const posting: Posting = {
+    type: 'manual', id, no: '', subtype: '', date: input.date, memo: input.memo, bureau: '', team: '',
+    lines: input.lines.map(l => ({ ...l, kind: byName.get(l.account)!.kind })),
+  }
+  await useDb().insert(schema.glEntries).values(glRows(posting, createdBy, new Date()))
+  return { id, date: posting.date, memo: posting.memo, lines: posting.lines }
+}
+
+/** 手で入れた仕訳を取り消す（もとの行に取り消しの印を付け、貸借を入れ替えた行を足す） */
+export async function cancelManualJournal(id: number, createdBy: string) {
+  const db = useDb()
+  const g = schema.glEntries
+  const where = and(eq(g.voucherType, 'manual'), eq(g.voucherId, id), eq(g.isCancelled, false))
+  const active = await db.select().from(g).where(where).orderBy(asc(g.lineNo))
+  if (!active.length) throw createError({ statusCode: 404, message: '仕訳が見つかりません。' })
+  await assertPeriodsOpen([...new Set(active.map(a => a.postingDate))])
+  const now = new Date()
+  await db.batch([
+    db.update(g).set({ isCancelled: true }).where(where),
+    db.insert(g).values(active.map(({ id: _id, ...r }) => ({ ...r, debit: r.credit, credit: r.debit, isCancelled: true, createdBy, createdAt: now }))),
+  ])
+}
+
+/**
  * 帳簿を読む前に、⑬と記録の抜けをそろえる。
  * 仕訳があるのに⑬に行がない記録（この表を作る前の記録や、途中で失敗したもの）は足し、記録がなくなったのに⑬に残っている行は取り消す。
  * 行がすでにある記録は変えない。
@@ -218,11 +249,10 @@ export async function syncVoucher(type: VoucherType, id: number, createdBy = SYS
 async function reconcileLedger() {
   const db = useDb()
   const g = schema.glEntries
-  const [done, incomes, records, manuals, kanOf, active, periods] = await Promise.all([
+  const [done, incomes, records, kanOf, active, periods] = await Promise.all([
     db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).then(withItems),
     db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')),
     db.select().from(schema.cashbookRecords),
-    db.select().from(schema.manualJournals),
     kanOfLines(),
     db.selectDistinct({ type: g.voucherType, id: g.voucherId, date: g.postingDate }).from(g).where(eq(g.isCancelled, false)),
     closedPeriods(),
@@ -231,7 +261,6 @@ async function reconcileLedger() {
     ...done.map(e => postingOfEntry(e, kanOf)),
     ...incomes.map(i => postingOfIncome(i, kanOf)),
     ...records.map(postingOfRecord),
-    ...manuals.map(postingOfManual),
   ].filter((p): p is Posting => p != null)
   const keyOf = (type: VoucherType, id: number) => `${type}:${id}`
   const posted = new Set(active.map(a => keyOf(a.type, a.id)))
@@ -239,15 +268,16 @@ async function reconcileLedger() {
   const now = new Date()
   // 締めた期に入るものはそろえない（締めたときの帳簿のまま）
   const lacking = postings.filter(p => !posted.has(keyOf(p.type, p.id)) && !closedPeriodOf(p.date, periods))
-  for (const type of ['execution', 'income', 'cashbook', 'manual'] as const) {
+  for (const type of ['execution', 'income', 'cashbook'] as const) {
     await ensureAccounts(lacking.filter(p => p.type === type).flatMap(p => p.lines), type)
   }
   await ensureAccounts(Object.entries(SYSTEM_ACCOUNTS).map(([account, kind]) => ({ account, kind })), 'cashbook')
   await ensureAccounts(Object.values(CASH_ACCOUNT_TITLES).map(account => ({ account, kind: '資産' as const })), 'cashbook')
   const missing = lacking.flatMap(p => glRows(p, SYSTEM_USER, now))
   for (let i = 0; i < missing.length; i += 100) await db.insert(g).values(missing.slice(i, i + 100)).onConflictDoNothing()
+  // 手入力の仕訳は⑬そのものが記録なので、そろえる相手がない
   for (const a of active) {
-    if (!wanted.has(keyOf(a.type, a.id))) await syncVoucher(a.type, a.id, SYSTEM_USER, { skipClosed: true })
+    if (a.type !== 'manual' && !wanted.has(keyOf(a.type, a.id))) await syncVoucher(a.type, a.id, SYSTEM_USER, { skipClosed: true })
   }
 }
 

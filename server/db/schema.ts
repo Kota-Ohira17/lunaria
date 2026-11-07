@@ -231,25 +231,8 @@ export const cashbookRecords = sqliteTable('cashbook_records', {
 export type CashbookRecord = typeof cashbookRecords.$inferSelect
 
 /**
- * 手で入れた仕訳（財務局長・管理者）。執行・収入・出納帳の記録からの仕訳は持たず、帳簿を開くたびに作る。
- * lines は [{ account, kind, debit, credit }]（借方の合計＝貸方の合計）。
- */
-export const manualJournals = sqliteTable('manual_journals', {
-  id: integer('id').primaryKey({ autoIncrement: true }),
-  /** 仕訳の日付（YYYY-MM-DD） */
-  date: text('date').notNull(),
-  /** 摘要 */
-  memo: text('memo').notNull(),
-  lines: text('lines', { mode: 'json' }).$type<{ account: string, kind: AccountKind, debit: number, credit: number }[]>().notNull(),
-  createdBy: text('created_by').notNull(),
-  createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-})
-
-export type ManualJournal = typeof manualJournals.$inferSelect
-
-/**
  * ⑬総勘定元帳DB。確定した仕訳を1行ずつ持つ（ERPNext の GL Entry にならう）。
- * もとの記録（③執行依頼・⑧収入・⑨出納帳・⑩手入力の仕訳）とは voucher_type・voucher_id で結ぶ。
+ * もとの記録（③執行依頼・⑧収入・⑨出納帳）とは voucher_type・voucher_id で結ぶ。手入力の仕訳（voucher_type が manual）は、ここに直接書く（もとの記録はない）。
  * 行は書き換えない。訂正は、もとの行に is_cancelled を付け、貸借を入れ替えた取り消しの行と新しい行を足す。帳簿に出すのは is_cancelled のない行だけ。
  */
 export const GL_VOUCHER_TYPES = ['execution', 'income', 'cashbook', 'manual'] as const
