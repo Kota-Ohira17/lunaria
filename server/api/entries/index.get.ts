@@ -24,8 +24,7 @@ export default defineEventHandler(async (event) => {
     orderBy = view === 'number' ? [asc(e.itemNumber), asc(e.createdAt)] : byDeadline
   }
   else if (view === 'noEvidence') {
-    // 証憑がまだ付いていない執行依頼（以前の証憑提出フォームの申請は除く）
-    conds.push(eq(e.kind, 'execution'))
+    // 証憑がまだ付いていない執行依頼
     conds.push(sql`not exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})`)
     orderBy = byDeadline
   }
@@ -33,7 +32,7 @@ export default defineEventHandler(async (event) => {
     // 対応済みで証憑が付いていて、まだ確認も差し戻しもしていない申請
     conds.push(eq(e.status, 'done'))
     conds.push(sql`${e.evidenceCheckedAt} is null and ${e.evidenceReturnComment} = ''`)
-    conds.push(sql`((${e.kind} = 'execution' and exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})) or (${e.kind} = 'evidence' and ${e.attachmentId} is not null))`)
+    conds.push(sql`exists (select 1 from ${schema.evidenceFiles} where ${schema.evidenceFiles.entryId} = ${e.id})`)
     orderBy = byDeadline
   }
   else if (view === 'pending') {

@@ -58,11 +58,10 @@ type DoneEntry = Entry & { items: EntryItem[], evidences: EvidenceView[], attach
 
 /**
  * 申請の証憑へのリンク（ファイル名を表示）。
- * - 執行依頼：台帳から付けた証憑。まだなければ請求書（振込で添付されたもの）
- * - 以前の証憑提出フォームの申請：その添付
+ * 台帳から付けた証憑。まだなければ請求書（振込で添付されたもの）
  */
 function evidenceLinks(e: DoneEntry, origin: string): Link[] {
-  if (e.kind === 'execution' && e.evidences.length) {
+  if (e.evidences.length) {
     return e.evidences.map(f => ({ text: f.fileName, url: `${origin}/api/entries/${e.id}/evidences/${f.id}` }))
   }
   if (e.attachmentId) return [{ text: e.attachmentName ?? `${e.seq} 添付`, url: `${origin}/api/entries/${e.id}/attachment` }]
@@ -86,7 +85,7 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
   const rows = await withEvidences(await withItems(
     await db.select().from(schema.entries).where(eq(schema.entries.status, 'done')).orderBy(asc(schema.entries.createdAt)),
   ))
-  // 請求書・以前の証憑提出の添付のファイル名
+  // 請求書のファイル名
   const attachmentIds = rows.map(r => r.attachmentId).filter((id): id is number => id != null)
   const names = new Map(attachmentIds.length
     ? (await db.select({ id: schema.attachments.id, fileName: schema.attachments.fileName }).from(schema.attachments).where(inArray(schema.attachments.id, attachmentIds))).map(a => [a.id, a.fileName])
@@ -394,7 +393,6 @@ function evidenceTable(settled: SettledLine[], origin: string): Table {
 function executionTable(done: DoneEntry[], origin: string): Table {
   const columns: TableColumn[] = [
     { key: 'seq', header: '申請番号', width: 10 },
-    { key: 'kind', header: '種別', width: 10 },
     { key: 'createdAt', header: '申請日', width: 12, format: 'date' },
     { key: 'executedAt', header: '執行日', width: 12, format: 'date' },
     { key: 'paymentMethod', header: '執行形態', width: 14 },
@@ -416,7 +414,6 @@ function executionTable(done: DoneEntry[], origin: string): Table {
   for (const e of done) {
     const base = {
       seq: e.seq,
-      kind: e.kind === 'evidence' ? '証憑（立替）' : '執行依頼',
       createdAt: e.createdAt,
       executedAt: e.executedAt,
       paymentMethod: e.paymentMethod ?? e.type,

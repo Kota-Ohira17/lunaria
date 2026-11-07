@@ -19,7 +19,7 @@ export default defineEventHandler(async (event) => {
   if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
   if (entry.status !== 'done') throw createError({ statusCode: 400, message: '執行待ちの申請の証憑は、まだ確認できません。' })
   const evidences = (await evidencesOf([id])).get(id) ?? []
-  const hasEvidence = entry.kind === 'execution' ? evidences.length > 0 : Boolean(entry.attachmentId)
+  const hasEvidence = evidences.length > 0
   if (!hasEvidence) throw createError({ statusCode: 400, message: '証憑がまだ提出されていません。' })
 
   const [updated] = await db.update(e)

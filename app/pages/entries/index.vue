@@ -42,8 +42,8 @@ const execErrors = ref<string[]>([])
 
 type Row = NonNullable<typeof entries.value>[number]
 
-/** 証憑が出ているか（執行依頼は台帳から付けた証憑、以前の証憑提出フォームの申請はその添付） */
-const hasEvidence = (row: Row) => (row.kind === 'execution' ? row.evidences.length > 0 : Boolean(row.attachmentId))
+/** 証憑が出ているか（台帳から付けた証憑） */
+const hasEvidence = (row: Row) => row.evidences.length > 0
 /**
  * 状態：執行待ち（ZAI の対応前）→ 証憑提出待ち（ZAI が執行した、証憑はまだ）→ 証憑確認待ち（証憑が出た）→ 完了（財務局長・管理者が証憑を確認した）。
  * 証憑が先に出ていても、ZAI が対応するまでは「執行待ち」（立替の返金待ちなど）。
@@ -56,9 +56,7 @@ function stageOf(row: Row): keyof typeof STAGE_LABELS {
   if (row.evidenceReturnComment) return 'returned'
   return hasEvidence(row) ? 'checking' : 'done'
 }
-const evidenceStatus = (row: Row) => (row.kind === 'execution'
-  ? (row.evidences.length ? `${row.evidences.length}件` : '未提出')
-  : (row.attachmentId ? 'あり' : '未提出'))
+const evidenceStatus = (row: Row) => (row.evidences.length ? `${row.evidences.length}件` : '未提出')
 
 /** 形態の列。発注は通販サイトも出して、詳細を開かなくても分かるようにする */
 function methodLabel(row: Row) {
@@ -205,7 +203,7 @@ async function setDone(row: Row, done: boolean) {
       method: 'POST',
       body: {
         done,
-        bank: row.type === '振込' && row.kind === 'execution' ? exec.bank : undefined,
+        bank: row.type === '振込' ? exec.bank : undefined,
         amount: !row.items.length && exec.amount ? Number(exec.amount) : undefined,
         quantity: exec.quantity || undefined,
       },
@@ -314,7 +312,7 @@ async function setDone(row: Row, done: boolean) {
               <tr v-if="opened === row.id" class="detail">
                 <td colspan="11">
                   <EvidenceCheck :entry="row" :has-evidence="hasEvidence(row)" @changed="refresh" />
-                  <EvidenceSection v-if="row.kind === 'execution'" :entry="row" @changed="refresh" />
+                  <EvidenceSection :entry="row" @changed="refresh" />
                   <ShippingNotice
                     v-if="row.type === '発注' && row.status === 'pending'"
                     class="shipping-in-row"
@@ -385,14 +383,14 @@ async function setDone(row: Row, done: boolean) {
                     </template>
                     <template v-if="row.remark"><dt>備考</dt><dd>{{ row.remark }}</dd></template>
                     <template v-if="row.attachmentId">
-                      <dt>{{ row.kind === 'execution' ? '請求書' : '証憑' }}</dt>
+                      <dt>請求書</dt>
                       <dd><a :href="`/api/entries/${row.id}/attachment`" target="_blank">ファイルを開く</a></dd>
                     </template>
                   </dl>
 
                   <div v-if="can('executeEntries')" class="exec">
                     <template v-if="row.status === 'pending'">
-                      <div v-if="row.kind === 'execution' && row.type === '振込'" class="bank-pick">
+                      <div v-if="row.type === '振込'" class="bank-pick">
                         <label>使用口座
                           <select v-model="exec.bank"><option v-for="b in TRANSFER_BANKS" :key="b">{{ b }}</option></select>
                         </label>
