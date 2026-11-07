@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
  * 帳簿（財務局長・管理者）。複式簿記の試算表・仕訳帳・総勘定元帳。
- * 仕訳は⑬総勘定元帳DB に確定して持つ（執行済みの申請・確認済みの収入・出納帳の記録・手で入れた仕訳から作る。現金主義）。
- * 勘定科目（⑭）と期の締め（⑮）もここで扱う。
+ * 仕訳は執行済みの申請・確認済みの収入・出納帳の記録から開くたびに作り（現金主義）、手で入れた仕訳を足す。
  * 収入・支出の科目は予算の款、口座は「普通預金（SMBC）」などの資産の科目。
  */
+import type { AccountKind } from '#shared/constants'
 import { ACCOUNT_KINDS } from '#shared/constants'
 
 const { can } = usePermissions()
@@ -13,8 +13,8 @@ if (!can('manageCashbook')) await navigateTo('/')
 const { data, refresh } = await useFetch('/api/ledger')
 type Journal = NonNullable<typeof data.value>['journals'][number]
 
-const tab = ref<'trial' | 'journal' | 'ledger' | 'accounts' | 'periods'>('trial')
-const TABS = { trial: '試算表', journal: '仕訳帳', ledger: '総勘定元帳', accounts: '勘定科目', periods: '期の締め' } as const
+const tab = ref<'trial' | 'journal' | 'ledger'>('trial')
+const TABS = { trial: '試算表', journal: '仕訳帳', ledger: '総勘定元帳' } as const
 const SOURCE_LABELS: Record<Journal['source'], string> = { execution: '執行', income: '収入', opening: '期首の残高', transfer: '移動', adjust: '調整', manual: '手入力' }
 
 const balanced = computed(() => !!data.value && data.value.totals.debit === data.value.totals.credit)
@@ -41,15 +41,15 @@ const errors = ref<string[]>([])
 const pending = ref(false)
 const message = ref('')
 
-/** 手で入れる仕訳。科目は⑭の使う科目から選ぶ（区分は科目のもの） */
-type Line = { account: string, debit: string, credit: string }
-const emptyLine = (): Line => ({ account: '', debit: '', credit: '' })
+/** 手で入れる仕訳 */
+type Line = { account: string, kind: AccountKind | '', debit: string, credit: string }
+const emptyLine = (): Line => ({ account: '', kind: '', debit: '', credit: '' })
 const form = reactive({ date: today(), memo: '', lines: [emptyLine(), emptyLine()] as Line[] })
-const { data: accountList, refresh: refreshAccounts } = await useFetch('/api/ledger/accounts', { default: () => [] })
-const usable = computed(() => accountList.value.filter(a => !a.disabled))
-const kindOf = (name: string) => accountList.value.find(a => a.name === name)?.kind ?? ''
-async function onChanged() {
-  await Promise.all([refresh(), refreshAccounts()])
+const knownAccounts = computed(() => data.value?.ledger.map(a => ({ account: a.account, kind: a.kind })) ?? [])
+/** 今ある科目名を入れたら、区分を合わせる */
+function onAccount(l: Line) {
+  const known = knownAccounts.value.find(a => a.account === l.account.trim())
+  if (known) l.kind = known.kind
 }
 const num = (v: string) => (/^\d+$/.test(v) ? Number(v) : 0)
 const formDebit = computed(() => form.lines.reduce((s, l) => s + num(l.debit), 0))
@@ -61,7 +61,7 @@ async function addJournal() {
   try {
     await $fetch('/api/ledger/journals', {
       method: 'POST',
-      body: { date: form.date, memo: form.memo, lines: form.lines.filter(l => l.account || l.debit || l.credit).map(l => ({ ...l, kind: kindOf(l.account), debit: l.debit || 0, credit: l.credit || 0 })) },
+      body: { date: form.date, memo: form.memo, lines: form.lines.filter(l => l.account || l.debit || l.credit).map(l => ({ ...l, debit: l.debit || 0, credit: l.credit || 0 })) },
     })
     Object.assign(form, { memo: '', lines: [emptyLine(), emptyLine()] })
     message.value = '仕訳を入れました。'
@@ -116,7 +116,7 @@ const yenOrBlank = (n: number) => (n ? formatYen(n) : '')
               <tbody>
                 <tr v-for="a in data.ledger.filter(x => x.kind === k)" :key="a.account">
                   <td class="muted">{{ k }}</td>
-                  <td><small v-if="a.number" class="muted">{{ a.number }}</small> <button type="button" class="link" @click="openAccount(a.account)">{{ a.account }}</button></td>
+                  <td><button type="button" class="link" @click="openAccount(a.account)">{{ a.account }}</button></td>
                   <td class="num">{{ formatYen(a.debit) }}</td>
                   <td class="num">{{ formatYen(a.credit) }}</td>
                   <td class="num" :class="{ minus: a.balance < 0 }">{{ formatYen(a.balance) }}</td>
@@ -149,8 +149,7 @@ const yenOrBlank = (n: number) => (n ? formatYen(n) : '')
                 <td>{{ l.credit ? l.account : '' }}</td>
                 <td class="num">{{ yenOrBlank(l.credit) }}</td>
                 <td v-if="n === 0" :rowspan="j.lines.length">
-                  <button v-if="j.manualId && !j.locked" type="button" class="link danger" @click="removeJournal(j)">取り消し</button>
-                  <small v-if="j.locked" class="muted">締め済み</small>
+                  <button v-if="j.manualId" type="button" class="link danger" @click="removeJournal(j)">取り消し</button>
                 </td>
               </tr>
             </tbody>
@@ -171,15 +170,10 @@ const yenOrBlank = (n: number) => (n ? formatYen(n) : '')
                 <thead><tr><th>勘定科目</th><th>区分</th><th class="num">借方</th><th class="num">貸方</th><th /></tr></thead>
                 <tbody>
                   <tr v-for="(l, n) in form.lines" :key="n">
+                    <td><input v-model="l.account" list="ledger-accounts" :aria-label="`${n + 1}行目の勘定科目`" @change="onAccount(l)"></td>
                     <td>
-                      <select v-model="l.account" :aria-label="`${n + 1}行目の勘定科目`">
-                        <option value="" disabled>選択</option>
-                        <optgroup v-for="k in ACCOUNT_KINDS" :key="k" :label="k">
-                          <option v-for="a in usable.filter(x => x.kind === k)" :key="a.name" :value="a.name">{{ a.number ? `${a.number} ` : '' }}{{ a.name }}</option>
-                        </optgroup>
-                      </select>
+                      <select v-model="l.kind" :aria-label="`${n + 1}行目の区分`"><option value="" disabled>選択</option><option v-for="k in ACCOUNT_KINDS" :key="k">{{ k }}</option></select>
                     </td>
-                    <td class="muted">{{ kindOf(l.account) }}</td>
                     <td class="num"><YenInput v-model="l.debit" :aria-label="`${n + 1}行目の借方`" /></td>
                     <td class="num"><YenInput v-model="l.credit" :aria-label="`${n + 1}行目の貸方`" /></td>
                     <td><button v-if="form.lines.length > 2" type="button" class="link" @click="form.lines.splice(n, 1)">外す</button></td>
@@ -195,17 +189,11 @@ const yenOrBlank = (n: number) => (n ? formatYen(n) : '')
                 </tfoot>
               </table>
             </div>
-            <p class="hint">選びたい科目がないときは、「<button type="button" class="link" @click="tab = 'accounts'">勘定科目</button>」で足してください。</p>
+            <datalist id="ledger-accounts"><option v-for="a in knownAccounts" :key="a.account" :value="a.account" /></datalist>
             <div><button type="submit" :disabled="pending || !formDebit || formDebit !== formCredit">仕訳の記録</button></div>
           </form>
         </div>
       </template>
-
-      <!-- 勘定科目 -->
-      <LedgerAccounts v-else-if="tab === 'accounts'" @changed="onChanged" />
-
-      <!-- 期の締め -->
-      <LedgerPeriods v-else-if="tab === 'periods'" @changed="onChanged" />
 
       <!-- 総勘定元帳 -->
       <template v-else>

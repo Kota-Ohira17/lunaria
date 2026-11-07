@@ -281,6 +281,20 @@
       "when": 1794067488822,
       "tag": "0039_accounts_and_periods",
       "breakpoints": true
+    },
+    {
+      "idx": 40,
+      "version": "6",
+      "when": 1794067840082,
+      "tag": "0040_drop_manual_journals",
+      "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "6",
+      "when": 1794068271731,
+      "tag": "0041_drop_accounts_and_periods",
+      "breakpoints": true
     }
   ]
 }

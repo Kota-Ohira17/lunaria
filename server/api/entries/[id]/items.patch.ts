@@ -10,7 +10,6 @@ export default defineEventHandler(async (event) => {
   const id = Number(getRouterParam(event, 'id'))
   const { amounts, quantities, vendors } = parseOr400(itemsUpdateSchema.safeParse(await readBody(event)))
   const db = useDb()
-  await assertVoucherOpen('execution', id)
   const entry = await db.query.entries.findFirst({ where: eq(schema.entries.id, id) })
   if (!entry) throw createError({ statusCode: 404, message: '申請が見つかりません。' })
 

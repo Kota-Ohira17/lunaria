@@ -89,6 +89,16 @@ export async function withItems<T extends Entry>(rows: T[]): Promise<(T & { item
   return rows.map(r => ({ ...r, items: byEntry.get(r.id) ?? [] }))
 }
 
+/** 数の通し番号を原子的に払い出す（手入力の仕訳の番号など） */
+export async function nextNumber(name: string) {
+  const [row] = await useDb()
+    .insert(schema.counters)
+    .values({ name, value: 1 })
+    .onConflictDoUpdate({ target: schema.counters.name, set: { value: sql`${schema.counters.value} + 1` } })
+    .returning({ value: schema.counters.value })
+  return row!.value
+}
+
 /** 通し番号を原子的に払い出す（旧GASの ScriptProperties カウンタの置き換え） */
 export async function nextSeq(kind: 'execution' | 'evidence' | 'income') {
   const [row] = await useDb()
