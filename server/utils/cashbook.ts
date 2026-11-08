@@ -1,7 +1,7 @@
 import { asc, eq } from 'drizzle-orm'
 import type { CashAccount, CashbookKind } from '../../shared/constants'
 import { CASH_ACCOUNTS } from '../../shared/constants'
-import { accountOfIncome, accountOfPayment } from '../../shared/cashbook'
+import { accountOfIncome, accountOfPayment, transferFeeOf } from '../../shared/cashbook'
 
 /** 出納帳の1行（お金の出入り）。入金は in、出金は out（どちらも正の額） */
 export interface CashbookRow {
@@ -78,6 +78,9 @@ export async function buildCashbook() {
       continue
     }
     flows.push({ key: `e${e.id}`, date, source: 'execution', seq: e.seq, recordId: null, label, account, in: 0, out: amount })
+    // 振込手数料は、振込と同じ口座から別の行で出す
+    const fee = transferFeeOf(e.details)
+    if (fee) flows.push({ key: `e${e.id}-fee`, date, source: 'execution', seq: e.seq, recordId: null, label: `振込手数料（${label}）`, account, in: 0, out: fee })
   }
 
   for (const i of incomes) {

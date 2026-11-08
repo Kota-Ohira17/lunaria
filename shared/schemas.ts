@@ -142,13 +142,16 @@ export type ExecutionRequestInput = z.input<typeof executionRequestSchema>
 export const INCOME_NUMBER_PATTERN = /^in-?\d{2}(-\d{2}){1,2}$/
 
 /**
- * 収入の記録。収入の予算明細を1つ選ぶ（budgetLineKey）か、予算にない収入として款（必須）〜節と項目番号（in から始まる）を書く。
+ * 収入の記録。収入の予算明細を選ぶ（lines。款などの見出しでまとめて複数選べ、明細ごとに金額を書く）か、
+ * 予算にない収入として款（必須）〜節と項目番号（in から始まる）・金額を書く。
+ * 明細を複数選んだときは明細ごとに1件ずつ記録し、収入項目名は明細の名前にする。
  */
 export const incomeSchema = z.object({
   applicantName: required('記録する人の氏名'),
   department: optionalBureau,
   inCharge: optionalTeam,
-  budgetLineKey: z.string().trim().default(''),
+  /** 選んだ収入の予算明細と、明細ごとの金額 */
+  lines: z.array(z.object({ key: z.string().trim().min(1), amount: yen })).max(200, '選べる明細は200件までです。').default([]),
   itemNumber: z.string().trim().default(''),
   budgetPath: z.object({
     kan: z.string().trim().max(100).default(''),
@@ -156,8 +159,10 @@ export const incomeSchema = z.object({
     moku: z.string().trim().max(100).default(''),
     setsu: z.string().trim().max(100).default(''),
   }).default({ kan: '', kou: '', moku: '', setsu: '' }),
-  itemName: required('収入項目名'),
-  amount: yen,
+  /** 収入項目名（明細を複数選んだときは使わず、明細の名前にする） */
+  itemName: z.string().trim().max(200).default(''),
+  /** 予算にない収入の金額（明細を選んだときは lines の金額） */
+  amount: yen.or(z.literal('')).default(''),
   receivedOn: date,
   payer: z.string().trim().max(200).default(''),
   method: z.enum(INCOME_METHODS, { error: '受け取り方を選んでください。' }),
@@ -166,10 +171,16 @@ export const incomeSchema = z.object({
   remark: z.string().trim().max(1000).default(''),
 }).superRefine((v, ctx) => {
   if (v.method === '振込' && !v.account) ctx.addIssue({ code: 'custom', message: '振込で受け取った口座を選んでください。', path: ['account'] })
-  if (v.budgetLineKey) return
+  if (v.lines.length) {
+    if (new Set(v.lines.map(l => l.key)).size !== v.lines.length) ctx.addIssue({ code: 'custom', message: '同じ明細が2回選ばれています。', path: ['lines'] })
+    if (v.lines.length === 1 && !v.itemName) ctx.addIssue({ code: 'custom', message: '収入項目名を入力してください。', path: ['itemName'] })
+    return
+  }
+  if (!v.itemName) ctx.addIssue({ code: 'custom', message: '収入項目名を入力してください。', path: ['itemName'] })
+  if (v.amount === '') ctx.addIssue({ code: 'custom', message: '金額を入力してください。', path: ['amount'] })
   if (!v.department) ctx.addIssue({ code: 'custom', message: '局を選んでください。', path: ['department'] })
   if (!v.inCharge) ctx.addIssue({ code: 'custom', message: '担当名を入力してください。', path: ['inCharge'] })
-  if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '収入の項目を予算から選んでください。', path: ['budgetLineKey'] })
+  if (!v.itemNumber) ctx.addIssue({ code: 'custom', message: '収入の項目を予算から選んでください。', path: ['lines'] })
   else if (!v.budgetPath.kan) ctx.addIssue({ code: 'custom', message: '予算にない収入の款を入力してください。', path: ['budgetPath'] })
   else if (!INCOME_NUMBER_PATTERN.test(v.itemNumber)) ctx.addIssue({ code: 'custom', message: '収入の項目番号は in01-03-02 の形式で入力してください。', path: ['itemNumber'] })
 })
@@ -254,6 +265,10 @@ export const executeSchema = z.object({
   done: z.boolean(),
   /** 振込のときに使った口座 */
   bank: z.enum(TRANSFER_BANKS).optional(),
+  /** 振込のときにかかった振込手数料（かからなければ 0） */
+  transferFee: z.coerce.number({ error: '振込手数料を数字で入力してください。' }).int('振込手数料は整数で入力してください。').min(0, '振込手数料は0円以上で入力してください。').optional(),
+  /** 振込手数料を当てる予算明細（budget_lines.key）。振込手数料の明細が予算にある */
+  transferFeeLineKey: z.string().trim().optional(),
   /** 発注のとき確定した金額・数量 */
   amount: yen.optional(),
   quantity: z.string().trim().optional(),

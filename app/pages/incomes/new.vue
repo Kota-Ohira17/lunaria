@@ -1,20 +1,20 @@
 <script setup lang="ts">
 /**
  * 収入の記録。入ってきたお金（協賛金・売上など）を記録する。支出の執行依頼にあたる。
- * 収入の予算明細（項目番号が in から始まる）から1つ選ぶか、予算にない収入として款〜節と項目番号を書く。
+ * 収入の予算明細（項目番号が in から始まる）を選ぶか、予算にない収入として款〜節と項目番号を書く。
+ * 明細は款などの見出しでまとめて選べ、明細ごとに金額を書く（明細ごとに1件ずつ記録される）。
  * 予算にない収入の項目番号は、局・担当・款を入れると候補が入る（手で直したらそれ以降は上書きしない）。
  */
 import { BANK_ACCOUNTS, INCOME_METHODS, bureauCodeOf } from '#shared/constants'
 
 const { user } = useUserSession()
-const { submit, errors, pending } = useSubmit<{ seq: string }>('/api/incomes')
+const { submit, errors, pending } = useSubmit<{ seq: string, seqs: string[] }>('/api/incomes')
 const { data: lines } = await useIncomeLines()
 
 const form = reactive({
   applicantName: user.value?.name ?? '',
   department: '',
   inCharge: '',
-  budgetLineKey: '',
   itemNumber: '',
   budgetPath: { kan: '', kou: '', moku: '', setsu: '' },
   itemName: '',
@@ -30,13 +30,19 @@ const manual = ref(false)
 const useManual = computed(() => manual.value || !lines.value.length)
 const nameEdited = ref(false)
 const numberEdited = ref(false)
-const done = ref('')
+const done = ref<string[]>([])
 
-/** 明細を選んだら、収入項目名を入れる（局・担当はサーバーで明細から決める） */
-watch(() => form.budgetLineKey, (key) => {
-  const line = lines.value.find(l => l.key === key)
-  if (!line) return
-  if (!nameEdited.value) form.itemName = line.label
+/** 選んだ明細の key と、明細ごとの金額（選んだときは予算額を入れておく） */
+const pickedKeys = ref<string[]>([])
+const lineAmounts = ref<Record<string, string>>({})
+const byKey = computed(() => new Map(lines.value.map(l => [l.key, l])))
+const pickedLines = computed(() => pickedKeys.value.map(k => byKey.value.get(k)).filter(l => l != null).sort((a, b) => a.sortOrder - b.sortOrder))
+const pickedTotal = computed(() => pickedLines.value.reduce((s, l) => s + (Number(lineAmounts.value[l.key]) || 0), 0))
+watch(pickedKeys, (keys) => {
+  lineAmounts.value = Object.fromEntries(keys.map(k => [k, lineAmounts.value[k] ?? String(byKey.value.get(k)?.budgetAmount ?? '')]))
+  // 1件だけのときは収入項目名を入れる（局・担当はサーバーで明細から決める）。複数なら明細ごとの名前になる
+  const only = keys.length === 1 ? byKey.value.get(keys[0]!) : undefined
+  if (only && !nameEdited.value) form.itemName = only.label
 })
 /** 予算にない収入：款〜節から収入項目名を作り、局・担当・款から項目番号の候補を取る */
 watch(() => form.budgetPath, (p) => {
@@ -51,7 +57,7 @@ watch(() => [useManual.value, form.department, form.inCharge, form.budgetPath.ka
   catch { /* 候補が出せなくても手で入れられる */ }
 })
 watch(useManual, (m) => {
-  if (m) form.budgetLineKey = ''
+  if (m) pickedKeys.value = []
   else {
     form.itemNumber = ''
     form.budgetPath = { kan: '', kou: '', moku: '', setsu: '' }
@@ -59,19 +65,16 @@ watch(useManual, (m) => {
   }
 })
 
-/** 予算の表（BudgetPicker）は key の配列で選ぶので、1件の key とつなぐ */
-const pickedKeys = computed({
-  get: () => (form.budgetLineKey ? [form.budgetLineKey] : []),
-  set: (keys: string[]) => { form.budgetLineKey = keys[0] ?? '' },
-})
-
 async function onSubmit() {
+  const picked = useManual.value ? [] : pickedLines.value
   const result = await submit({
     ...form,
-    budgetLineKey: useManual.value ? '' : form.budgetLineKey,
+    lines: picked.map(l => ({ key: l.key, amount: lineAmounts.value[l.key] })),
+    itemName: picked.length > 1 ? '' : form.itemName,
+    amount: picked.length ? '' : form.amount,
     itemNumber: useManual.value ? form.itemNumber : '',
   }, file.value)
-  if (result) done.value = result.seq
+  if (result) done.value = result.seqs ?? [result.seq]
 }
 </script>
 
@@ -79,8 +82,8 @@ async function onSubmit() {
   <section class="page">
     <h1>収入の記録</h1>
 
-    <div v-if="done" class="success">
-      <p>記録しました（番号 {{ done }}）。財務局長・管理者が入金を確かめると、確認済みになります。</p>
+    <div v-if="done.length" class="success">
+      <p>記録しました（{{ done.length > 1 ? `${done.length}件、番号 ${done.join('・')}` : `番号 ${done[0]}` }}）。財務局長・管理者が入金を確かめると、確認済みになります。</p>
       <NuxtLink :to="{ path: '/entries', query: { flow: 'income' } }">台帳（収入）へ</NuxtLink>
     </div>
 
@@ -119,16 +122,27 @@ async function onSubmit() {
           </label>
         </template>
         <template v-else>
-          <p class="hint">入ってきたお金に当たる明細を、表から1つ選んでください。</p>
-          <BudgetPicker v-model="pickedKeys" flow="income" single />
+          <p class="hint">入ってきたお金に当たる明細を、表から選んでください。款・項・目・節の見出しでまとめて選ぶと、明細ごとに金額を入れて、明細ごとに1件ずつ記録します。</p>
+          <BudgetPicker v-model="pickedKeys" flow="income" />
         </template>
-        <label><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" class="w-m" required @input="nameEdited = true"></label>
+        <label v-if="useManual || pickedLines.length <= 1"><span>収入項目名<span class="req">*</span></span><input v-model="form.itemName" class="w-m" required @input="nameEdited = true"></label>
+        <p v-else class="hint">収入項目名は、明細ごとの名前で記録します。</p>
       </fieldset>
 
       <fieldset>
         <legend>入金</legend>
+        <div v-if="!useManual && pickedLines.length" class="amounts">
+          <span>金額<span class="req">*</span><span class="hint">（明細ごと。予算額を入れてあるので、実際に入った金額に直してください）</span></span>
+          <ul>
+            <li v-for="l in pickedLines" :key="l.key">
+              <span class="label"><span class="num">{{ l.itemNumber }}</span>{{ l.label }}</span>
+              <YenInput v-model="lineAmounts[l.key]!" :aria-label="`${l.label} の金額`" required />
+            </li>
+          </ul>
+          <p v-if="pickedLines.length > 1" class="total">合計 {{ formatYen(pickedTotal) }}</p>
+        </div>
         <div class="inline-row">
-          <label><span>金額<span class="req">*</span></span><YenInput v-model="form.amount" placeholder="例：50000" required /></label>
+          <label v-if="useManual || !pickedLines.length"><span>金額<span class="req">*</span></span><YenInput v-model="form.amount" placeholder="例：50000" required /></label>
           <label><span>入金日<span class="req">*</span></span><input v-model="form.receivedOn" type="date" required></label>
         </div>
         <label><span>相手先</span><span class="hint">協賛企業・購入者など</span><input v-model="form.payer" class="w-m"></label>
@@ -160,5 +174,12 @@ async function onSubmit() {
 .inline-row { display: flex; flex-wrap: wrap; gap: .75rem 1.5rem; align-items: start; }
 .path { display: grid; grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr)); gap: .5rem; }
 .req { color: var(--danger); margin-left: .15rem; }
+/* 明細ごとの金額：名前 | 金額 */
+.amounts { display: grid; gap: .4rem; font-size: .9rem; }
+.amounts ul { list-style: none; margin: 0; padding: 0; display: grid; gap: .3rem; }
+.amounts li { display: grid; grid-template-columns: minmax(0, 1fr) 9rem; gap: .75rem; align-items: center; }
+.amounts .label { overflow-wrap: anywhere; }
+.amounts .num { color: var(--muted); font-variant-numeric: tabular-nums; margin-right: .4rem; }
+.amounts .total { margin: 0; text-align: right; font-variant-numeric: tabular-nums; font-weight: 600; }
 label .hint { display: block; }
 </style>

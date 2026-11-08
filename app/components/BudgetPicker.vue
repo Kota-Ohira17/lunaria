@@ -3,7 +3,7 @@ import { bureauNameOf } from '#shared/constants'
 
 /**
  * 予算明細をスプレッドシートと同じ形の表から複数選ぶ。v-model は明細の key の配列。
- * flow="income" なら収入の明細を出す（収入の記録）。single なら1件だけ選ぶ（別の明細を押すと入れ替わる。見出しでまとめては選べない）。
+ * flow="income" なら収入の明細を出す（収入の記録。見出しでまとめても選べる）。single なら1件だけ選ぶ（別の明細を押すと入れ替わる。見出しでまとめては選べない）。
  * v-model:amounts / quantities / vendors は明細ごとの実際の執行額・数量・取引先。
  * ここでは選んだときに予算の値を入れておくだけで、直すのは執行形態ごとの入力欄（ItemDetailsInputs）。
  */
@@ -139,7 +139,7 @@ function toggleMany(keys: string[], on: boolean) {
         <strong>選択中 {{ selectedLines.length }}件</strong>
         <span>予算額 {{ formatYen(selectedTotal) }}</span>
       </div>
-      <p v-if="!single" class="hint">実際の金額・数量・取引先は、このあとの入力欄で明細ごとに入力します。</p>
+      <p v-if="!single" class="hint">{{ flow === 'income' ? '実際に入った金額は、このあとの入力欄で明細ごとに入力します。' : '実際の金額・数量・取引先は、このあとの入力欄で明細ごとに入力します。' }}</p>
       <section v-for="g in selectedByKan" :key="g.key" class="kan-group">
         <header class="kan-head">
           <span class="kan-title">
