@@ -418,7 +418,7 @@ async function setDone(row: Row, done: boolean) {
                       </div>
                       <div v-if="row.type === '振込'" class="fee-pick">
                         <label><span class="nowrap">振込手数料（円）<span class="req">*</span></span>
-                          <YenInput v-model="exec.transferFee" class="fee-amount" placeholder="無料なら0" required />
+                          <YenInput v-model="exec.transferFee" class="fee-amount" required />
                         </label>
                         <label v-if="exec.transferFee !== '' && exec.transferFee !== '0'">振込手数料の予算明細
                           <select v-model="exec.transferFeeLineKey" class="fee-line">
