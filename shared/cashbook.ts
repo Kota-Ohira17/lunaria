@@ -31,6 +31,12 @@ export function transferFeeOf(details: unknown): number {
   return typeof fee === 'number' && fee > 0 ? fee : 0
 }
 
+/** 振込手数料を当てた予算明細の key（entries.details.transferFeeLineKey。なければ空） */
+export function transferFeeLineKeyOf(details: unknown): string {
+  const key = (details as { transferFeeLineKey?: unknown } | null)?.transferFeeLineKey
+  return typeof key === 'string' ? key : ''
+}
+
 /** 収入の受け取り方 → お金が入った口座。振込は記録で選んだ口座、現金は現金、その他は決まらない（null） */
 export function accountOfIncome(method: string, account: string | null | undefined): CashAccount | null {
   if (method === '現金') return '現金'

@@ -1,7 +1,7 @@
 import { and, asc, eq, inArray } from 'drizzle-orm'
 import type { AccountKind } from '../../shared/constants'
 import { CASH_ACCOUNT_TITLES } from '../../shared/constants'
-import { accountOfIncome, accountOfPayment, transferFeeOf } from '../../shared/cashbook'
+import { accountOfIncome, accountOfPayment, transferFeeLineKeyOf, transferFeeOf } from '../../shared/cashbook'
 import type { GlEntry } from '../db/schema'
 
 /**
@@ -37,7 +37,7 @@ const UNKNOWN_INCOME = '予算にない収入'
 /** 出納帳の調整（利息・手数料など）の科目 */
 const ADJUST_GAIN = '雑収入'
 const ADJUST_LOSS = '雑費'
-/** 振込の執行でかかった振込手数料の科目 */
+/** 振込の執行でかかった振込手数料の科目（当てた予算明細がないとき） */
 const TRANSFER_FEE = '支払手数料'
 /** 期首の残高の相手の科目 */
 const OPENING = '前期繰越'
@@ -102,9 +102,9 @@ function postingOfEntry(e: Awaited<ReturnType<typeof withItems>>[number], kanOf:
   const expense = byItems
     ? e.items.map((i, n) => debit(kanOf.get(i.lineKey) || fallback, '支出', actuals[n]!))
     : [debit(fallback, '支出', amount)]
-  // 振込手数料は支払手数料にし、同じ口座から出す
+  // 振込手数料は当てた予算明細の款（明細がなければ支払手数料）にし、同じ口座から出す
   const fee = transferFeeOf(e.details)
-  const feeLines = fee ? [debit(TRANSFER_FEE, '支出', fee)] : []
+  const feeLines = fee ? [debit(kanOf.get(transferFeeLineKeyOf(e.details)) || TRANSFER_FEE, '支出', fee)] : []
   return {
     type: 'execution', id: e.id, no: e.seq, subtype: '', date: dateInJapan(e.executedAt),
     memo: `${e.itemName}（${e.department}/${e.inCharge}）`, bureau: e.department, team: e.inCharge,

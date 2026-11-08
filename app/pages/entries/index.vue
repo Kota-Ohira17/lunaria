@@ -37,7 +37,20 @@ const orderSummary = computed(() => {
 })
 
 const opened = ref<number>()
-const exec = reactive({ bank: 'SMBC' as (typeof TRANSFER_BANKS)[number], amount: '', quantity: '', transferFee: '' })
+const exec = reactive({ bank: 'SMBC' as (typeof TRANSFER_BANKS)[number], amount: '', quantity: '', transferFee: '', transferFeeLineKey: '' })
+
+/**
+ * 振込手数料を当てる予算明細の候補。振込手数料は予算の明細にあるので、
+ * 名前に「振込手数料」を含む明細（なければ「手数料」を含む明細）を最初に選んでおく。
+ */
+const { data: expenseLines } = useBudgetLines()
+const feeLineOptions = computed(() => expenseLines.value ?? [])
+function defaultFeeLineKey() {
+  const lines = feeLineOptions.value
+  return (lines.find(l => l.label.includes('振込手数料')) ?? lines.find(l => l.label.includes('手数料')))?.key ?? ''
+}
+const feeLineLabel = (key: unknown) => feeLineOptions.value.find(l => l.key === key)
+const feeLineText = (key: unknown) => { const l = feeLineLabel(key); return l ? `${l.itemNumber} ${l.label}` : '' }
 const execErrors = ref<string[]>([])
 
 type Row = NonNullable<typeof entries.value>[number]
@@ -101,10 +114,12 @@ const DETAIL_LABELS: Record<string, string> = {
   accountNumber: '口座番号',
   accountName: '口座名義',
   transferFee: '振込手数料',
+  transferFeeLine: '振込手数料の予算明細',
 }
 
 function detailRows(row: Row) {
-  const { bank, preExecutionItemId: _item, preExecutionSettled: _settled, ...rest } = row.details as Record<string, unknown>
+  const { bank, preExecutionItemId: _item, preExecutionSettled: _settled, transferFeeLineKey: feeLine, ...rest } = row.details as Record<string, unknown>
+  if (rest.transferFee) rest.transferFeeLine = feeLineText(feeLine) || '（予算にない項目）'
   return Object.entries({ ...rest, ...(bank as object | undefined) })
     .filter(([, v]) => v !== '' && v != null)
     .map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: v === true ? (k === 'preExecution' ? 'はい' : '承認済み') : k === 'transferFee' ? formatYen(Number(v)) : String(v), isUrl: k === 'url' }))
@@ -143,6 +158,7 @@ function toggle(row: Row) {
   exec.amount = row.amount ? String(row.amount) : ''
   exec.quantity = row.quantity ?? ''
   exec.transferFee = ''
+  exec.transferFeeLineKey = defaultFeeLineKey()
   execErrors.value = []
   itemsSaved.value = false
   resetDrafts(row.items)
@@ -207,6 +223,7 @@ async function setDone(row: Row, done: boolean) {
         done,
         bank: row.type === '振込' ? exec.bank : undefined,
         transferFee: done && row.type === '振込' && exec.transferFee !== '' ? exec.transferFee : undefined,
+        transferFeeLineKey: done && row.type === '振込' && exec.transferFeeLineKey ? exec.transferFeeLineKey : undefined,
         amount: !row.items.length && exec.amount ? Number(exec.amount) : undefined,
         quantity: exec.quantity || undefined,
       },
@@ -398,8 +415,16 @@ async function setDone(row: Row, done: boolean) {
                           <select v-model="exec.bank"><option v-for="b in TRANSFER_BANKS" :key="b">{{ b }}</option></select>
                         </label>
                         <a :href="bankLinks[exec.bank]" target="_blank" rel="noopener" class="bank-link">{{ exec.bank }}のサイトを開く ↗</a>
-                        <label>振込手数料（円）<span class="req">*</span>
-                          <YenInput v-model="exec.transferFee" placeholder="例：145（無料なら0）" required />
+                      </div>
+                      <div v-if="row.type === '振込'" class="fee-pick">
+                        <label><span class="nowrap">振込手数料（円）<span class="req">*</span></span>
+                          <YenInput v-model="exec.transferFee" class="fee-amount" placeholder="無料なら0" required />
+                        </label>
+                        <label v-if="exec.transferFee !== '' && exec.transferFee !== '0'">振込手数料の予算明細
+                          <select v-model="exec.transferFeeLineKey" class="fee-line">
+                            <option value="">予算にない項目として出す</option>
+                            <option v-for="l in feeLineOptions" :key="l.key" :value="l.key">{{ l.itemNumber }} {{ l.label }}</option>
+                          </select>
                         </label>
                       </div>
                       <template v-if="row.type === '発注' && !row.items.length">
@@ -442,6 +467,11 @@ async function setDone(row: Row, done: boolean) {
 .ok { color: var(--done); font-size: .85rem; }
 .bank-pick { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
 .req { color: var(--danger); margin-left: .15rem; }
+/* 振込手数料：金額と、当てる予算明細を口座の下に並べる */
+.fee-pick { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; margin-top: .5rem; }
+.fee-amount { width: 8rem; }
+.fee-line { max-width: min(24rem, 100%); }
+.nowrap { white-space: nowrap; }
 .bank-link { white-space: nowrap; padding-bottom: .5rem; }
 .row-links { display: flex; flex-wrap: wrap; gap: .1rem .6rem; font-size: .82rem; font-weight: normal; }
 .row-links a { white-space: nowrap; }

@@ -1,5 +1,6 @@
 import { asc, eq, inArray } from 'drizzle-orm'
 import { flowOf } from '../../shared/budgetCompile'
+import { transferFeeLineKeyOf, transferFeeOf } from '../../shared/cashbook'
 import type { BudgetLine, Entry, EntryItem, IncomeRecord } from '../db/schema'
 import type { EvidenceView } from './evidence'
 
@@ -96,7 +97,7 @@ export async function buildSettlementTables(origin: string): Promise<Table[]> {
   const settled = settledLines(expenseLines, done, sheetExtras(sheetRows))
   const incomes = await db.select().from(schema.incomeRecords).where(eq(schema.incomeRecords.status, 'done')).orderBy(asc(schema.incomeRecords.receivedOn))
   return [
-    detailTable(settled), evidenceTable(settled, origin), executionTable(done, origin),
+    detailTable(settled), evidenceTable(settled, origin), executionTable(done, origin, expenseLines),
     incomeTable(incomeLines(lines.filter(l => flowOf(l.itemNumber) === 'income'), incomes)),
   ]
 }
@@ -140,6 +141,18 @@ function settledLines(lines: BudgetLine[], done: DoneEntry[], extras: ReturnType
   const used = new Map<string, { items: { item: EntryItem, entry: DoneEntry }[] }>()
   const outside: SettledLine[] = []
   for (const entry of done) {
+    // 振込手数料は、当てた予算明細の執行に足す（明細がなければ「予算にない項目」の振込手数料）
+    const fee = transferFeeOf(entry.details)
+    if (fee) {
+      const feeKey = transferFeeLineKeyOf(entry.details)
+      if (feeKey && byKey.has(feeKey)) {
+        const feeItem = { lineKey: feeKey, actualAmount: fee, actualQuantity: null, quantity: '', actualVendor: null, vendor: '' } as unknown as EntryItem
+        const rec = used.get(feeKey) ?? { items: [] }
+        rec.items.push({ item: feeItem, entry })
+        used.set(feeKey, rec)
+      }
+      else outside.push(outsideLine(entry.itemNumber, `振込手数料（${entry.itemName}）`, fee, '', '', [entry]))
+    }
     if (!entry.items.length) {
       // 予算にない項目として出した申請は、書いた款・項・目・節と担当を出す
       const path = (entry.details as { budgetPath?: { kan?: string, kou?: string, moku?: string, setsu?: string } }).budgetPath
@@ -390,7 +403,8 @@ function evidenceTable(settled: SettledLine[], origin: string): Table {
   return { name: '証憑（支出）', columns, rows, title: ['決算案証憑', '支出'], sheetStyle: true }
 }
 
-function executionTable(done: DoneEntry[], origin: string): Table {
+function executionTable(done: DoneEntry[], origin: string, lines: BudgetLine[]): Table {
+  const byKey = new Map(lines.map(l => [l.key, l]))
   const columns: TableColumn[] = [
     { key: 'seq', header: '申請番号', width: 10 },
     { key: 'createdAt', header: '申請日', width: 12, format: 'date' },
@@ -425,8 +439,10 @@ function executionTable(done: DoneEntry[], origin: string): Table {
       evidence: evidenceCellOf(evidenceLinks(e, origin)),
       remark: e.remark,
     }
+    const fee = feeRow(e, base, byKey)
     if (!e.items.length) {
       rows.push({ values: { ...base, itemNumber: e.itemNumber, label: '（予算にない項目）', actual: e.amount } })
+      if (fee) rows.push(fee)
       continue
     }
     for (const i of e.items) {
@@ -443,6 +459,15 @@ function executionTable(done: DoneEntry[], origin: string): Table {
         },
       })
     }
+    if (fee) rows.push(fee)
   }
   return { name: '執行一覧', columns, rows }
+}
+
+/** 振込手数料の行（執行一覧で、その申請の明細の行の下に出す） */
+function feeRow(e: DoneEntry, base: Record<string, CellValue>, byKey: Map<string, BudgetLine>): TableRow | null {
+  const fee = transferFeeOf(e.details)
+  if (!fee) return null
+  const line = byKey.get(transferFeeLineKeyOf(e.details))
+  return { values: { ...base, itemNumber: line?.itemNumber ?? '', label: `振込手数料${line ? `（${line.label}）` : '（予算にない項目）'}`, actual: fee, entryAmount: null } }
 }
