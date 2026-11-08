@@ -37,7 +37,7 @@ const orderSummary = computed(() => {
 })
 
 const opened = ref<number>()
-const exec = reactive({ bank: 'SMBC' as (typeof TRANSFER_BANKS)[number], amount: '', quantity: '' })
+const exec = reactive({ bank: 'SMBC' as (typeof TRANSFER_BANKS)[number], amount: '', quantity: '', transferFee: '' })
 const execErrors = ref<string[]>([])
 
 type Row = NonNullable<typeof entries.value>[number]
@@ -100,13 +100,14 @@ const DETAIL_LABELS: Record<string, string> = {
   accountType: '口座種別',
   accountNumber: '口座番号',
   accountName: '口座名義',
+  transferFee: '振込手数料',
 }
 
 function detailRows(row: Row) {
   const { bank, preExecutionItemId: _item, preExecutionSettled: _settled, ...rest } = row.details as Record<string, unknown>
   return Object.entries({ ...rest, ...(bank as object | undefined) })
     .filter(([, v]) => v !== '' && v != null)
-    .map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: v === true ? (k === 'preExecution' ? 'はい' : '承認済み') : String(v), isUrl: k === 'url' }))
+    .map(([k, v]) => ({ label: DETAIL_LABELS[k] ?? k, value: v === true ? (k === 'preExecution' ? 'はい' : '承認済み') : k === 'transferFee' ? formatYen(Number(v)) : String(v), isUrl: k === 'url' }))
 }
 
 /** 一覧の行からそのまま開く商品のリンク（依頼に書いたものと、選んだ予算明細のもの） */
@@ -141,6 +142,7 @@ function toggle(row: Row) {
   opened.value = opened.value === row.id ? undefined : row.id
   exec.amount = row.amount ? String(row.amount) : ''
   exec.quantity = row.quantity ?? ''
+  exec.transferFee = ''
   execErrors.value = []
   itemsSaved.value = false
   resetDrafts(row.items)
@@ -204,6 +206,7 @@ async function setDone(row: Row, done: boolean) {
       body: {
         done,
         bank: row.type === '振込' ? exec.bank : undefined,
+        transferFee: done && row.type === '振込' && exec.transferFee !== '' ? exec.transferFee : undefined,
         amount: !row.items.length && exec.amount ? Number(exec.amount) : undefined,
         quantity: exec.quantity || undefined,
       },
@@ -395,6 +398,9 @@ async function setDone(row: Row, done: boolean) {
                           <select v-model="exec.bank"><option v-for="b in TRANSFER_BANKS" :key="b">{{ b }}</option></select>
                         </label>
                         <a :href="bankLinks[exec.bank]" target="_blank" rel="noopener" class="bank-link">{{ exec.bank }}のサイトを開く ↗</a>
+                        <label>振込手数料（円）<span class="req">*</span>
+                          <YenInput v-model="exec.transferFee" placeholder="例：145（無料なら0）" required />
+                        </label>
                       </div>
                       <template v-if="row.type === '発注' && !row.items.length">
                         <label>確定金額（円）<YenInput v-model="exec.amount" /></label>
@@ -434,7 +440,8 @@ async function setDone(row: Row, done: boolean) {
 .items-table tfoot td { font-weight: 600; border-bottom: none; }
 .items-actions { display: flex; align-items: center; gap: .75rem; margin: 0 0 .75rem; }
 .ok { color: var(--done); font-size: .85rem; }
-.bank-pick { display: flex; align-items: end; gap: .6rem; }
+.bank-pick { display: flex; flex-wrap: wrap; align-items: end; gap: .6rem; }
+.req { color: var(--danger); margin-left: .15rem; }
 .bank-link { white-space: nowrap; padding-bottom: .5rem; }
 .row-links { display: flex; flex-wrap: wrap; gap: .1rem .6rem; font-size: .82rem; font-weight: normal; }
 .row-links a { white-space: nowrap; }

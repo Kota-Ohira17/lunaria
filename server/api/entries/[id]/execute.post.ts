@@ -29,6 +29,12 @@ export default defineEventHandler(async (event) => {
   if (body.done && entry.type === '振込' && !body.bank) {
     throw createError({ statusCode: 400, message: '振込に使った口座を選んでください。' })
   }
+  if (body.done && entry.type === '振込' && body.transferFee == null) {
+    throw createError({ statusCode: 400, message: '振込手数料を入力してください（かからなかったときは 0）。' })
+  }
+  // 振込手数料は details に持つ（表を足さない）。執行待ちに戻したら消す
+  const { transferFee: _fee, ...restDetails } = entry.details
+  const details = body.done && entry.type === '振込' ? { ...restDetails, transferFee: body.transferFee } : restDetails
 
   const [updated] = await db
     .update(e)
@@ -40,9 +46,11 @@ export default defineEventHandler(async (event) => {
           paymentMethod: paymentMethodFor(entry, body.bank),
           amount: body.amount ?? entry.amount,
           quantity: body.quantity || entry.quantity,
+          details,
         }
       : {
           status: 'pending',
+          details,
           executedAt: null,
           executedBy: null,
           paymentMethod: null,

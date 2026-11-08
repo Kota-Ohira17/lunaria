@@ -265,6 +265,8 @@ export const executeSchema = z.object({
   done: z.boolean(),
   /** 振込のときに使った口座 */
   bank: z.enum(TRANSFER_BANKS).optional(),
+  /** 振込のときにかかった振込手数料（かからなければ 0） */
+  transferFee: z.coerce.number({ error: '振込手数料を数字で入力してください。' }).int('振込手数料は整数で入力してください。').min(0, '振込手数料は0円以上で入力してください。').optional(),
   /** 発注のとき確定した金額・数量 */
   amount: yen.optional(),
   quantity: z.string().trim().optional(),
