@@ -1,5 +1,5 @@
 import { eq } from 'drizzle-orm'
-import { flowOf } from '../../../../shared/budgetCompile'
+import { findTransferFeeLine } from '../../../../shared/cashbook'
 import { executeSchema } from '../../../../shared/schemas'
 import type { Entry } from '../../../db/schema'
 
@@ -33,11 +33,12 @@ export default defineEventHandler(async (event) => {
   if (body.done && entry.type === '振込' && body.transferFee == null) {
     throw createError({ statusCode: 400, message: '振込手数料を入力してください（かからなかったときは 0）。' })
   }
-  // 振込手数料は予算の明細に当てる。明細を選んだら、支出の明細であることを確かめる
-  const feeLineKey = body.done && entry.type === '振込' && body.transferFee ? (body.transferFeeLineKey ?? '') : ''
-  if (feeLineKey) {
-    const line = await db.query.budgetLines.findFirst({ where: eq(schema.budgetLines.key, feeLineKey) })
-    if (!line || flowOf(line.itemNumber) !== 'expense') throw createError({ statusCode: 400, message: '振込手数料の予算明細が見つかりません。ページを再読み込みして選び直してください。' })
+  // 振込手数料は必ず財務局（ZAI）の「振込手数料」の明細に入れる
+  let feeLineKey = ''
+  if (body.done && entry.type === '振込' && body.transferFee) {
+    const line = findTransferFeeLine(await db.select().from(schema.budgetLines))
+    if (!line) throw createError({ statusCode: 400, message: '財務局（ZAI）の予算に「振込手数料」の明細がありません。予算に振込手数料の明細を入れてから執行してください。' })
+    feeLineKey = line.key
   }
   // 振込手数料と当てた明細は details に持つ（表を足さない）。執行待ちに戻したら消す
   const { transferFee: _fee, transferFeeLineKey: _feeLine, ...restDetails } = entry.details

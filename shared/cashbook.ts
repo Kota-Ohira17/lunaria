@@ -3,7 +3,7 @@
  * 画面（台帳の支出・収入）とサーバー（出納帳の計算）の両方で使う。
  */
 import type { CashAccount } from './constants'
-import { CASH_ACCOUNTS } from './constants'
+import { CASH_ACCOUNTS, bureauCodeOf } from './constants'
 
 const isAccount = (v: unknown): v is CashAccount => (CASH_ACCOUNTS as readonly unknown[]).includes(v)
 
@@ -29,6 +29,16 @@ export function accountOfPayment(paymentMethod: string | null | undefined): Cash
 export function transferFeeOf(details: unknown): number {
   const fee = (details as { transferFee?: unknown } | null)?.transferFee
   return typeof fee === 'number' && fee > 0 ? fee : 0
+}
+
+/**
+ * 振込手数料を入れる予算明細。振込手数料は必ず財務局（ZAI）の「振込手数料」の明細に入れる。
+ * 財務局の支出の明細のうち、名前に「振込手数料」を含むもの（並び順で最初のもの）。なければ undefined。
+ */
+export function findTransferFeeLine<T extends { bureau: string, label: string, itemNumber: string, sortOrder: number }>(lines: T[]): T | undefined {
+  return lines
+    .filter(l => bureauCodeOf(l.bureau) === 'ZAI' && l.itemNumber.startsWith('out') && l.label.includes('振込手数料'))
+    .sort((a, b) => a.sortOrder - b.sortOrder)[0]
 }
 
 /** 振込手数料を当てた予算明細の key（entries.details.transferFeeLineKey。なければ空） */
