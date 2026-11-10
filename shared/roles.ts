@@ -29,7 +29,7 @@ export const PERMISSIONS = {
   exportSettlement: STAFF,
   /** 予算の集約を始める・査定する・確定する、局と担当を整える（最初の予算の取り込みも） */
   reviewBudget: ['budget_officer', ...STAFF],
-  /** 集約の段取り（局・部・担当と入力する人の設定、集約の開始・終了・査定開始・確定・中止）。昨年の本予算・決算の取り込みは役職ではなく、ZAI の zas に割り当てられた人だけ（budgetAccess.ts） */
+  /** 集約の段取り（局・部・担当と入力する人の設定、集約の開始・終了・査定開始・確定・中止）。昨年の本予算・決算の取り込みは、管理者と、ZAI の zas に割り当てられた人だけ（budgetAccess.ts） */
   arrangeBudget: STAFF,
   /** 委員の登録・権限変更 */
   manageUsers: STAFF,

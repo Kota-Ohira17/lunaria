@@ -20,10 +20,11 @@ export async function requireArrangeBudget(event: H3Event) {
 }
 
 /**
- * 昨年の本予算・決算の取り込みができる人：予算を入力する担当が財務局 ZAI の zas の人だけ（ユーザー管理の「予算を入力する担当」）。
- * 役職では決めない（管理者・財務局長でも、zas に割り当てられていなければできない）。
+ * 昨年の本予算・決算の取り込みができる人：管理者と、予算を入力する担当が財務局 ZAI の zas の人（ユーザー管理の「予算を入力する担当」）。
+ * 管理者以外は役職では決めない（財務局長・財務局長補佐でも、zas に割り当てられていなければできない）。
  */
 export async function canImportReferences(user: SessionUser) {
+  if (user.role === 'admin') return true
   const me = await useDb().query.users.findFirst({ where: eq(schema.users.email, user.email) })
   return !!me && me.budgetBureau === bureauNameOf('ZAI') && me.budgetTeam.toLowerCase() === 'zas'
 }
@@ -31,6 +32,6 @@ export async function canImportReferences(user: SessionUser) {
 /** 取り込みができる人でなければ 403 */
 export async function requireImportReferences(event: H3Event) {
   const user = await requireUser(event)
-  if (!(await canImportReferences(user))) throw createError({ statusCode: 403, message: 'この操作は、ZAI の zas に割り当てられた人だけができます。' })
+  if (!(await canImportReferences(user))) throw createError({ statusCode: 403, message: 'この操作は、管理者と、ZAI の zas に割り当てられた人だけができます。' })
   return user
 }

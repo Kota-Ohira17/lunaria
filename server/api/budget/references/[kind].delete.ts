@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { BUDGET_REFERENCE_KINDS } from '../../../db/schema'
 
-/** 取り込んだ昨年の本予算・決算（支出・収入）を消す（ZAI の zas に割り当てられた人だけ）。コピー済みの明細はそのまま残る */
+/** 取り込んだ昨年の本予算・決算（支出・収入）を消す（管理者と、ZAI の zas に割り当てられた人だけ）。コピー済みの明細はそのまま残る */
 export default defineEventHandler(async (event) => {
   await requireImportReferences(event)
   const param = getRouterParam(event, 'kind') ?? ''
