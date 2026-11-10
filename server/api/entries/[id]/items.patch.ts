@@ -2,7 +2,7 @@ import { and, eq } from 'drizzle-orm'
 import { itemsUpdateSchema } from '../../../../shared/schemas'
 
 /**
- * 明細ごとの実際の執行額・数量・取引先を直す（財務局長・管理者のみ）。対応済みにする前後どちらでもよい。
+ * 明細ごとの実際の執行額・数量・取引先を直す（財務局長・財務局長補佐・管理者のみ）。対応済みにする前後どちらでもよい。
  * 申請の金額は、すべての明細に執行額が入っていればその合計にそろえる。
  */
 export default defineEventHandler(async (event) => {

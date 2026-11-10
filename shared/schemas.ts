@@ -191,11 +191,11 @@ export const incomeFileSchema = z.object({
   kind: z.enum(INCOME_FILE_KINDS, { error: '証憑の種類を選んでください。' }),
 })
 
-/** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・管理者） */
+/** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・財務局長補佐・管理者） */
 export const incomeConfirmSchema = z.object({ done: z.boolean() })
 
 /**
- * 出納帳に手で書く記録（財務局長・管理者）。
+ * 出納帳に手で書く記録（財務局長・財務局長補佐・管理者）。
  * 期首の残高・残高の照合は口座のその日の残高、口座間の移動は移した額（移動元 → 移動先）、
  * 調整は増えたら正・減ったら負の額（利息・手数料など）。
  */
@@ -228,7 +228,7 @@ const journalLine = z.object({
   credit: z.coerce.number({ error: '貸方の金額を数字で入力してください。' }).int('整数で入力してください。').min(0).default(0),
 })
 
-/** 手で入れる仕訳（財務局長・管理者）。借方の合計と貸方の合計が同じで、0円でないこと */
+/** 手で入れる仕訳（財務局長・財務局長補佐・管理者）。借方の合計と貸方の合計が同じで、0円でないこと */
 export const manualJournalSchema = z.object({
   date,
   memo: required('摘要').pipe(z.string().max(500)),
@@ -254,7 +254,7 @@ export const evidenceUploadSchema = z.object({
 })
 export type EvidenceUploadInput = z.input<typeof evidenceUploadSchema>
 
-/** 証憑の確認（財務局長・管理者）。差し戻しは理由が必須 */
+/** 証憑の確認（財務局長・財務局長補佐・管理者）。差し戻しは理由が必須 */
 export const evidenceCheckSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('confirm') }),
   z.object({ action: z.literal('undo') }),

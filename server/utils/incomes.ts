@@ -6,7 +6,7 @@ import type { SessionUser } from './auth'
 
 /**
  * 収入の記録（income_records）と、その証憑（income_files）。
- * 支出の執行依頼と同じく、だれでも記録でき、だれでも見られる。財務局長・管理者が入金を確かめると確認済みになる。
+ * 支出の執行依頼と同じく、だれでも記録でき、だれでも見られる。財務局長・財務局長補佐・管理者が入金を確かめると確認済みになる。
  */
 
 /** 収入の証憑のファイル名（拡張子なし）。「項目番号_担当名_収入項目名_月日（4桁）」 */
@@ -20,7 +20,7 @@ export function incomeFileLabel(income: Pick<IncomeRecord, 'itemNumber' | 'inCha
   ].filter(Boolean).join('_')
 }
 
-/** 証憑を外せるのは、付けた本人と財務局長・管理者 */
+/** 証憑を外せるのは、付けた本人と財務局長・財務局長補佐・管理者 */
 export const canDeleteIncomeFile = (user: SessionUser, file: { uploadedBy: string }) => file.uploadedBy === user.email || can(user.role, 'executeEntries')
 
 /** 収入ごとの証憑（ファイル名つき。付けた順） */

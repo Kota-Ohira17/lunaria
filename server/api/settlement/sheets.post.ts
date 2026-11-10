@@ -7,7 +7,7 @@ const bodySchema = z.object({
 })
 
 /**
- * 決算シートを Google スプレッドシートに書き出す（財務局長・管理者のみ）。
+ * 決算シートを Google スプレッドシートに書き出す（財務局長・財務局長補佐・管理者のみ）。
  * 「決算」「執行一覧」シートを書き直す（なければ追加する）。ほかのシートには触らない。
  */
 export default defineEventHandler(async (event) => {

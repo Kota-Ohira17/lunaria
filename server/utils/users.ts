@@ -18,7 +18,7 @@ export function toUserView(u: User) {
 }
 
 /**
- * ユーザー管理ができる人（財務局長・管理者）から外す（降格・削除する）前のチェック。
+ * ユーザー管理ができる人（財務局長・財務局長補佐・管理者）から外す（降格・削除する）前のチェック。
  * 環境変数で固定された管理者は外せず、ユーザー管理ができる人が1人もいなくなる変更もできない。
  */
 export async function assertCanRemoveManager(target: User) {
@@ -32,7 +32,7 @@ export async function assertCanRemoveManager(target: User) {
     .from(u)
     .where(and(inArray(u.role, [...PERMISSIONS.manageUsers]), ne(u.email, target.email)))
   if (!row?.others) {
-    throw createError({ statusCode: 400, message: '財務局長・管理者が1人もいなくなるため変更できません。' })
+    throw createError({ statusCode: 400, message: '財務局長・財務局長補佐・管理者が1人もいなくなるため変更できません。' })
   }
 }
 

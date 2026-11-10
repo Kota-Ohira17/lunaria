@@ -9,7 +9,7 @@ import { BUDGET_TERM } from '#shared/constants'
 
 const { can } = usePermissions()
 const reviewer = computed(() => can('reviewBudget'))
-/** 集約の段取り（開始・すべて提出・終了・査定開始・確定・中止、局・部・担当と入力する人）ができるか（管理者と財務局長補佐（ZAI の zas）） */
+/** 集約の段取り（開始・すべて提出・終了・査定開始・確定・中止、局・部・担当と入力する人）ができるか（財務局長・財務局長補佐・管理者） */
 const { data: access } = await useFetch('/api/budget/access', { default: () => ({ canArrange: false }) })
 const arranger = computed(() => access.value.canArrange)
 const { data: view, refresh } = await useBudgetRound()
@@ -262,7 +262,7 @@ function cancelRound() {
             <button type="submit" :disabled="pending || !start.kind">集約開始</button>
           </form>
         </template>
-        <p v-else class="hint">管理者か財務局長補佐（ZAI の zas）が集約を始めると、ここから自分の担当の明細を入力できます。</p>
+        <p v-else class="hint">財務局長・財務局長補佐・管理者が集約を始めると、ここから自分の担当の明細を入力できます。</p>
       </div>
       <ReferenceImport v-if="view" />
     </template>

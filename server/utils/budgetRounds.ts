@@ -398,7 +398,7 @@ export async function canEditTeam(_user: SessionUser, _team: Pick<BudgetTeam, 'b
   return true
 }
 
-/** その担当の予算の変更を申請できるか（その担当に割り当てられた人と、財務管理部・財務局長・管理者） */
+/** その担当の予算の変更を申請できるか（その担当に割り当てられた人と、財務管理部・財務局長・財務局長補佐・管理者） */
 export async function canRequestChange(user: SessionUser, team: Pick<BudgetTeam, 'bureau' | 'team'>) {
   if (can(user.role, 'reviewBudget')) return true
   const me = await useDb().query.users.findFirst({ where: eq(schema.users.email, user.email) })

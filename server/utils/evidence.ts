@@ -5,7 +5,7 @@ import type { Entry } from '../db/schema'
 
 type SessionUser = { email: string, role: Parameters<typeof can>[0] }
 
-/** 付けた証憑を消せるか（付けた本人か、財務局長・管理者） */
+/** 付けた証憑を消せるか（付けた本人か、財務局長・財務局長補佐・管理者） */
 export function canDeleteEvidence(user: SessionUser, file: { uploadedBy: string }) {
   return file.uploadedBy === user.email || can(user.role, 'executeEntries')
 }

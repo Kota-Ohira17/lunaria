@@ -42,14 +42,14 @@ export const entries = sqliteTable('entries', {
   /** 振込期限・必要日・立替予定日・執行希望日・(証憑)立替日 */
   deadline: text('deadline'),
   remark: text('remark').notNull().default(''),
-  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・管理者以外には返さない。予算前執行は preExecution・preExecutionReason・preExecutionItemId（結んだ明細）・preExecutionSettled（本予算の確定で付け替え済み） */
+  /** 形態ごとの追加項目。口座情報は details.bank に入り、財務局長・財務局長補佐・管理者以外には返さない。予算前執行は preExecution・preExecutionReason・preExecutionItemId（結んだ明細）・preExecutionSettled（本予算の確定で付け替え済み） */
   details: text('details', { mode: 'json' }).$type<Record<string, unknown>>().notNull().default({}),
   attachmentId: integer('attachment_id').references(() => attachments.id),
   /** 執行時に確定する執行形態（振込（SMBC）/ 口座引落 / 立替 など） */
   paymentMethod: text('payment_method'),
   executedAt: integer('executed_at', { mode: 'timestamp_ms' }),
   executedBy: text('executed_by'),
-  /** 証憑を確認した時刻と人（財務局長・管理者）。証憑を付け直す・外すと空に戻る（確認待ち） */
+  /** 証憑を確認した時刻と人（財務局長・財務局長補佐・管理者）。証憑を付け直す・外すと空に戻る（確認待ち） */
   evidenceCheckedAt: integer('evidence_checked_at', { mode: 'timestamp_ms' }),
   evidenceCheckedBy: text('evidence_checked_by'),
   /** 証憑を差し戻したときの理由。証憑を付け直すと空に戻る */
@@ -64,7 +64,7 @@ export const counters = sqliteTable('counters', {
 export type Entry = typeof entries.$inferSelect
 
 /**
- * 本予算または補正予算の「支出」シートの明細（金額のある行）。財務局長・管理者が CSV を取り込むたびに全件入れ替える。
+ * 本予算または補正予算の「支出」シートの明細（金額のある行）。財務局長・財務局長補佐・管理者が CSV を取り込むたびに全件入れ替える。
  * key は「項目番号|名前|数量」で、取り込み直しても同じ明細なら同じ key になる。
  */
 export const budgetLines = sqliteTable('budget_lines', {
@@ -158,7 +158,7 @@ export type EvidenceFile = typeof evidenceFiles.$inferSelect
 /**
  * 収入の記録（入ってきたお金。協賛金・売上など）。支出の執行依頼にあたる。
  * 収入の予算明細（項目番号が in から始まる）から1つ選ぶか、予算にない収入として款〜節と項目番号を書く。
- * 財務局長・管理者が入金を確かめると確認済みになる。
+ * 財務局長・財務局長補佐・管理者が入金を確かめると確認済みになる。
  */
 export const incomeRecords = sqliteTable('income_records', {
   id: integer('id').primaryKey({ autoIncrement: true }),
@@ -210,7 +210,7 @@ export const incomeFiles = sqliteTable('income_files', {
 })
 
 /**
- * 出納帳に手で書く記録（財務局長・管理者）。執行・収入から自動で出る出入り以外のもの。
+ * 出納帳に手で書く記録（財務局長・財務局長補佐・管理者）。執行・収入から自動で出る出入り以外のもの。
  * opening＝期首の残高、transfer＝口座間の移動（account → to_account）、adjust＝調整（利息・手数料など。増えたら正）、
  * check＝残高の照合（通帳・手元の現金で数えたその日の残高。帳簿の残高との差を出す）。
  */
@@ -271,7 +271,7 @@ export type GlEntry = typeof glEntries.$inferSelect
 
 
 /**
- * ユーザーと権限。財務局長・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
+ * ユーザーと権限。財務局長・財務局長補佐・管理者が画面で先に登録するか、初回ログイン時に「一般」で作られる。
  * 環境変数 NUXT_ADMIN_EMAILS のユーザーはログインのたびに管理者に戻る（最初の管理者を作るため）。
  */
 export const users = sqliteTable('users', {
@@ -279,7 +279,7 @@ export const users = sqliteTable('users', {
   name: text('name').notNull(),
   role: text('role', { enum: ROLES }).notNull().default('member'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
-  /** 財務局長・管理者が先に登録して、まだログインしていない人は null */
+  /** 財務局長・財務局長補佐・管理者が先に登録して、まだログインしていない人は null */
   lastLoginAt: integer('last_login_at', { mode: 'timestamp_ms' }),
   /** Slack の DM を受け取るか（自分の申請を受け付けたとき / 対応済みになったとき）。本人が通知設定で変える */
   dmOnCreated: integer('dm_on_created', { mode: 'boolean' }).notNull().default(true),

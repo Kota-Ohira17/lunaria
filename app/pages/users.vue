@@ -82,6 +82,7 @@ const PERMISSION_LABELS: Record<Permission, string> = {
   executeEntries: '対応済み操作・執行額の修正',
   exportSettlement: '決算シートの出力',
   reviewBudget: '予算の集約・査定・確定',
+  arrangeBudget: '集約の段取り・昨年の予算の取り込み',
   manageUsers: '委員の登録・権限変更',
   manageCashbook: '出納帳（残高の照合）',
 }
@@ -92,7 +93,7 @@ const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString(
   <section>
     <h1>ユーザーと権限</h1>
     <p class="hint">
-      全員がすべての申請を閲覧できます。財務管理部は予算の集約・査定・確定ができます。財務局長と管理者はさらに、口座情報の閲覧・対応済み操作・決算シートの出力・この画面を使えます（できることは同じです）。
+      全員がすべての申請を閲覧できます。財務管理部は予算の集約・査定・確定ができます。財務局長・財務局長補佐・管理者はさらに、口座情報の閲覧・対応済み操作・決算シートの出力・集約の段取り・この画面を使えます（できることは同じです）。
       委員をメールアドレスで先に登録しておくこともでき、登録していない人も初回ログインで「一般」として一覧に加わります。
     </p>
 

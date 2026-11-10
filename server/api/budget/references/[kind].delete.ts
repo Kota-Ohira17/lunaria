@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { BUDGET_REFERENCE_KINDS } from '../../../db/schema'
 
-/** 取り込んだ昨年の本予算・決算（支出・収入）を消す（管理者と、財務局長補佐（ZAI の zas））。コピー済みの明細はそのまま残る */
+/** 取り込んだ昨年の本予算・決算（支出・収入）を消す（財務局長・財務局長補佐・管理者）。コピー済みの明細はそのまま残る */
 export default defineEventHandler(async (event) => {
   await requireArrangeBudget(event)
   const param = getRouterParam(event, 'kind') ?? ''

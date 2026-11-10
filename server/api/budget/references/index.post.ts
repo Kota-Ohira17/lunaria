@@ -2,7 +2,7 @@ import { BUDGET_REFERENCE_KINDS } from '../../../db/schema'
 import type { ReferenceKind } from '../../../utils/budgetReference'
 
 /**
- * 昨年の本予算・決算を CSV で取り込む（管理者と、財務局長補佐（ZAI の zas））。kind=budget は「支出」シート、settlement は「支出詳細」シート、
+ * 昨年の本予算・決算を CSV で取り込む（財務局長・財務局長補佐・管理者）。kind=budget は「支出」シート、settlement は「支出詳細」シート、
  * incomeBudget は「収入」シート、incomeSettlement は「収入詳細」シート。
  * 同じ種類を取り込み直すと入れ替える。本予算の集約で、担当の画面に参考として出す。
  */

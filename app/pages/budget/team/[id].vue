@@ -290,7 +290,7 @@ function addFromPre(p: PreExecution) {
             取り込んである昨年の本予算と決算です（収入の本予算：{{ refFile('incomeBudget')?.fileName || '未取り込み' }} ／ 収入の決算：{{ refFile('incomeSettlement')?.fileName || '未取り込み' }} ／ 支出の本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 支出の決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
             使える明細はコピーして、内容を確認してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
           </p>
-          <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。管理者か財務局長補佐（ZAI の zas）が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
+          <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。財務局長・財務局長補佐・管理者が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
           <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
           <template v-for="sec in refSections" :key="sec.flow">
           <div class="flow-head ref-flow-head" :class="sec.flow">

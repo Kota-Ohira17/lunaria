@@ -272,7 +272,7 @@ async function onSubmit() {
           <label><span>振込先の口座番号<span class="req">*</span></span><input v-model="form.bank.accountNumber" inputmode="numeric" pattern="\d{1,8}" required></label>
           <label><span>振込先の口座名義<span class="req">*</span></span><input v-model="form.bank.accountName" required></label>
         </div>
-        <p class="hint">口座情報は財務局長・管理者だけが閲覧でき、Slack通知には含まれません。</p>
+        <p class="hint">口座情報は財務局長・財務局長補佐・管理者だけが閲覧でき、Slack通知には含まれません。</p>
         <label>備考<textarea v-model="form.remark" rows="3" /></label>
       </fieldset>
 
