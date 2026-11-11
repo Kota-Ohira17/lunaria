@@ -1,4 +1,5 @@
 import { extname } from 'node:path'
+import { eq, inArray } from 'drizzle-orm'
 import type { H3Event } from 'h3'
 import { MAX_ATTACHMENT_BYTES } from '../../shared/constants'
 
@@ -31,20 +32,53 @@ export async function readPayloadAndFile(event: H3Event) {
   return { payload, file }
 }
 
-/** 添付ファイルを DB に保存し、ID を返す。ファイル名は旧GASと同じく「担当 項目名 種類」にする */
+/**
+ * 添付ファイルを保存し、ID を返す。ファイル名は旧GASと同じく「担当 項目名 種類」にする。
+ * ドライブの設定があれば共有ドライブのフォルダに上げてリンクを持ち、なければ DB に中身を持つ。
+ */
 export async function saveAttachment(file: Part, label: string) {
   const safeLabel = label.replace(/[\\/:*?"<>|\s]+/g, '_').slice(0, 120)
+  const fileName = `${safeLabel}${extname(file.filename ?? '').toLowerCase()}`
+  const stored = driveEnabled() ? { data: null, ...(await uploadToDrive(fileName, file.type!, file.data)) } : { data: file.data }
   const [row] = await useDb()
     .insert(schema.attachments)
-    .values({
-      fileName: `${safeLabel}${extname(file.filename ?? '').toLowerCase()}`,
-      contentType: file.type!,
-      size: file.data.length,
-      data: file.data,
-      createdAt: new Date(),
-    })
+    .values({ fileName, contentType: file.type!, size: file.data.length, ...stored, createdAt: new Date() })
     .returning({ id: schema.attachments.id })
   return row!.id
+}
+
+/** 添付ファイルを返す（ドライブに置いたものはドライブから読んで返す）。開ける人かどうかは呼ぶ側で確かめる */
+export async function sendAttachment(event: H3Event, id: number) {
+  const file = await useDb().query.attachments.findFirst({ where: eq(schema.attachments.id, id) })
+  if (!file) throw createError({ statusCode: 404 })
+  const data = file.data ?? (file.driveFileId ? await downloadFromDrive(file.driveFileId) : null)
+  if (!data) throw createError({ statusCode: 404 })
+  setResponseHeaders(event, {
+    'Content-Type': file.contentType,
+    'Content-Length': String(data.length),
+    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
+    'Cache-Control': 'private, no-store',
+    'X-Content-Type-Options': 'nosniff',
+  })
+  return data
+}
+
+/** 添付ファイルを消す（ドライブに置いたものはゴミ箱に入れる。共有ドライブのゴミ箱から30日は戻せる） */
+export async function deleteAttachments(ids: number[]) {
+  if (!ids.length) return
+  const db = useDb()
+  const files = await db.select({ driveFileId: schema.attachments.driveFileId }).from(schema.attachments).where(inArray(schema.attachments.id, ids))
+  for (const f of files) {
+    if (!f.driveFileId) continue
+    try {
+      await trashOnDrive(f.driveFileId)
+    }
+    catch (error) {
+      // ドライブで消せなくても DB の記録は消す（ドライブに残ったファイルは手で消せる）
+      console.error('ドライブのファイルを消せませんでした', f.driveFileId, error)
+    }
+  }
+  await db.delete(schema.attachments).where(inArray(schema.attachments.id, ids))
 }
 
 /** zod のエラーを 400 にする */

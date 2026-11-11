@@ -72,7 +72,7 @@ const notCopiedOf = (sec: (typeof refSections.value)[number]) => notCopied(sec.k
 /** はじめは、まだ明細がないときだけ開いておく */
 const refOpen = ref(items.value.length === 0)
 const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。内容を確認してから提出してください。`)
-const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
+const canChange = (i: BudgetItemView) => editable.value && !i.locked && (reviewer.value
   || (phase.value === 'collecting' && i.status !== 'submitted')
   || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
 /** 提出できる件数（未提出・要修正。集約終了の間は0） */
@@ -163,7 +163,7 @@ function addFromPre(p: PreExecution) {
 
       <section v-if="preExecutions.length" class="pre-list" :class="{ todo: preNotAdded }">
         <h2>予算前執行 <span class="muted">{{ preExecutions.length }}件<template v-if="preNotAdded">・未追加 {{ preNotAdded }}件</template></span></h2>
-        <p class="hint">この担当の予算前執行です。「明細に追加」で今年の明細にして、ほかの明細と同じように提出してください。明細にしておくと、本予算の確定のときにその明細へ付け替えます。</p>
+        <p class="hint">この担当の予算前執行です。「明細に追加」で今年の明細にして、ほかの明細と同じように提出してください。明細にしておくと、本予算の確定のときにその明細へ付け替えます。明細にしたあとは修正・削除できないので、款・金額をよく確かめてから追加してください。</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>番号</th><th>支出項目名</th><th class="num">金額</th><th>理由</th><th>明細</th></tr></thead>

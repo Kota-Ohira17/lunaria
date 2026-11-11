@@ -32,6 +32,19 @@ export default defineNuxtConfig({
     oauth: {
       google: { clientId: '', clientSecret: '' },
     },
+    /**
+     * 添付ファイルを置く Google ドライブ（委員会の共有ドライブのフォルダ）。サービスアカウントで読み書きする。
+     * 3つとも入れたときだけドライブに置き、空なら DB に置く（手元の開発など）。
+     */
+    googleDrive: {
+      /** 置き先のフォルダ ID（共有ドライブの中のフォルダ。サービスアカウントを「コンテンツ管理者」で追加しておく） */
+      folderId: '',
+      /** サービスアカウントのメールアドレス（client_email） */
+      serviceAccountEmail: '',
+      /** サービスアカウントの秘密鍵（private_key。改行は 
+ のままでよい） */
+      serviceAccountKey: '',
+    },
     public: {
       /** ローカル開発用。合言葉なしで任意のメールでログインできる */
       devLogin: false,

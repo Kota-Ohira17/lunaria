@@ -9,16 +9,5 @@ export default defineEventHandler(async (event) => {
   if (!entry?.attachmentId || !canSeeEntry(user, entry)) {
     throw createError({ statusCode: 404 })
   }
-
-  const file = await db.query.attachments.findFirst({ where: eq(schema.attachments.id, entry.attachmentId) })
-  if (!file) throw createError({ statusCode: 404 })
-
-  setResponseHeaders(event, {
-    'Content-Type': file.contentType,
-    'Content-Length': String(file.size),
-    'Content-Disposition': `inline; filename*=UTF-8''${encodeURIComponent(file.fileName)}`,
-    'Cache-Control': 'private, no-store',
-    'X-Content-Type-Options': 'nosniff',
-  })
-  return file.data
+  return sendAttachment(event, entry.attachmentId)
 })

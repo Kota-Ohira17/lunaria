@@ -5,15 +5,20 @@ import { CASH_ACCOUNTS, PAYMENT_TYPES } from '../../shared/constants'
 import { ROLES } from '../../shared/roles'
 
 /**
- * 添付ファイル（請求書・証憑）。サーバーレス環境（Vercel）ではディスクに保存できないので DB に持つ。
- * 旧GASの folderTable（Drive フォルダIDのハードコード）は不要になり、項目番号で検索できる。
+ * 添付ファイル（請求書・証憑・収入の証憑）。中身は委員会の共有ドライブ（Google ドライブ）のフォルダに置き、ここにはファイルの ID とリンクを持つ。
+ * ドライブの設定（NUXT_GOOGLE_DRIVE_*）がない環境（手元の開発など）では、これまでどおり中身を data に持つ。
+ * 画面からは、申請を見られる人だけがアプリを通して開ける（アプリがドライブから読んで返す）。
  */
 export const attachments = sqliteTable('attachments', {
   id: integer('id').primaryKey({ autoIncrement: true }),
   fileName: text('file_name').notNull(),
   contentType: text('content_type').notNull(),
   size: integer('size').notNull(),
-  data: blob('data', { mode: 'buffer' }).notNull(),
+  /** ファイルの中身（ドライブに置いたものは null） */
+  data: blob('data', { mode: 'buffer' }),
+  /** ドライブのファイル ID とリンク（ドライブに置いていなければ null） */
+  driveFileId: text('drive_file_id'),
+  driveUrl: text('drive_url'),
   createdAt: integer('created_at', { mode: 'timestamp_ms' }).notNull(),
 })
 

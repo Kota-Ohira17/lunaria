@@ -50,6 +50,7 @@ export async function evidencesOf(entryIds: number[]) {
       uploadedBy: ev.uploadedBy,
       createdAt: ev.createdAt,
       fileName: schema.attachments.fileName,
+      driveUrl: schema.attachments.driveUrl,
     })
     .from(ev)
     .innerJoin(schema.attachments, eq(schema.attachments.id, ev.attachmentId))
@@ -67,6 +68,8 @@ export type EvidenceView = {
   uploadedBy: string
   createdAt: Date
   fileName: string
+  /** Google ドライブのリンク（ドライブに置いていなければ null） */
+  driveUrl: string | null
 }
 
 /** 申請の一覧に証憑の一覧を付ける */

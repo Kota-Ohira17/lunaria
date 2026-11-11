@@ -345,7 +345,7 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
   for (const r of referenced) if (r.kind === 'budget' || r.kind === 'incomeBudget') lastYear.set(r.itemNumber, (lastYear.get(r.itemNumber) ?? 0) + r.amount)
   // 集約・査定に出す担当：昨年の本予算・決算（取り込んだ参考）に明細がある担当と、この集約に項目がある担当。
   // 参考をまだ取り込んでいなければ、すべての担当を出す
-  const preExecutions = await pendingPreExecutions(round, teams, latest)
+  const [preExecutions, lockedIds] = await Promise.all([pendingPreExecutions(round, teams, latest), lockedPreExecutionItemIds()])
   const preTeamIds = new Set(preExecutions.map(p => p.teamId))
   const refKeys = new Set(referenced.map(r => `${r.bureau}|${r.team}`))
   const withItems = new Set([...latest.values()].filter(r => !r.deleted).map(r => `${r.bureau}|${r.team}`))
@@ -375,6 +375,8 @@ export async function roundView(round: BudgetRound, user: SessionUser) {
       reviewCount: s?.count ?? 0,
       baseAmount: round.kind === '本予算' ? (lastYear.get(referenceNumberOf(r.itemNumber, issued)) ?? null) : b ? b.amount : null,
       baseItemId: b ? b.id : null,
+      /** 予算前執行と結んだ明細（修正・削除できない） */
+      locked: lockedIds.has(r.itemId),
       updatedAt: r.createdAt,
     }]
   }).sort((a, b) => (teamOrder.get(a.teamId)! - teamOrder.get(b.teamId)!) || a.sortOrder - b.sortOrder)

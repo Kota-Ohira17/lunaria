@@ -25,7 +25,7 @@ export const canDeleteIncomeFile = (user: SessionUser, file: { uploadedBy: strin
 
 /** 収入ごとの証憑（ファイル名つき。付けた順） */
 export async function incomeFilesOf(ids: number[]) {
-  const result = new Map<number, { id: number, kind: string, uploadedBy: string, fileName: string, createdAt: Date }[]>()
+  const result = new Map<number, { id: number, kind: string, uploadedBy: string, fileName: string, driveUrl: string | null, createdAt: Date }[]>()
   if (!ids.length) return result
   const db = useDb()
   const files = await db.select({
@@ -35,6 +35,7 @@ export async function incomeFilesOf(ids: number[]) {
     uploadedBy: schema.incomeFiles.uploadedBy,
     createdAt: schema.incomeFiles.createdAt,
     fileName: schema.attachments.fileName,
+    driveUrl: schema.attachments.driveUrl,
   }).from(schema.incomeFiles)
     .innerJoin(schema.attachments, eq(schema.attachments.id, schema.incomeFiles.attachmentId))
     .where(inArray(schema.incomeFiles.incomeId, ids))

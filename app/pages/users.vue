@@ -163,6 +163,8 @@ const formatDate = (d: string | Date | null) => (d ? new Date(d).toLocaleString(
         </tbody>
       </table>
     </div>
+
+    <AttachmentsToDrive v-if="me?.role === 'admin'" />
   </section>
 </template>
 

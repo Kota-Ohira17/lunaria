@@ -12,7 +12,7 @@ export default defineEventHandler(async (event) => {
   const {
     type, applicantName, department: writtenBureau, inCharge: writtenTeam, budgetLineKeys, itemNumber: manualItemNumber, itemName, remark, deadline,
     itemAmounts, itemQuantities, itemVendors: _itemVendors, budgetCommitteeApproved, preExecution, preExecutionReason, budgetPath,
-    requestBudgetChange, budgetChangeReason,
+    requestBudgetChange: _requestBudgetChange, budgetChangeReason,
     ...rest
   } = input
   const { amount, quantity, ...details } = rest as typeof rest & { amount?: number, quantity?: string }
@@ -37,6 +37,8 @@ export default defineEventHandler(async (event) => {
 
   // 金額が予算額と違う明細（「予算の変更も申請する」にチェックがあれば、あとで申請する）
   const changed = changedItems(lines, itemAmounts)
+  // 金額が予算額と違う明細があれば、予算の変更（②）を必ず申請する。理由は必須
+  if (changed.length && !budgetChangeReason) throw createError({ statusCode: 400, message: '金額が予算額と違う明細があります。予算の変更の理由を書いてください。' })
 
   const attachmentId = file
     ? await saveAttachment(file, `${inCharge}_${itemName}_請求書`)
@@ -68,7 +70,7 @@ export default defineEventHandler(async (event) => {
     attachmentId,
   }, lines, input)
   // 執行依頼は受け付けたので、予算の変更の申請で失敗しても依頼は取り消さない（申請できなかった明細を返す）
-  const budgetChangeRequests = changed.length && requestBudgetChange
+  const budgetChangeRequests = changed.length
     ? await requestChangesFromEntry(entry, changed, user, budgetChangeReason)
     : null
 

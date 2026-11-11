@@ -105,6 +105,7 @@ const pathOf = (i: Income) => (i.details as { budgetPath?: { kan: string, kou: s
                   <li v-for="f in i.files" :key="f.id">
                     <a :href="`/api/incomes/${i.id}/files/${f.id}`" target="_blank" rel="noopener">{{ f.fileName }}</a>
                     <small class="muted">{{ f.kind }}</small>
+                    <a v-if="f.driveUrl" :href="f.driveUrl" target="_blank" rel="noopener" class="drive">ドライブ</a>
                     <button v-if="f.uploadedBy === user?.email || staff" type="button" class="link" @click="removeFile(i, f)">外す</button>
                   </li>
                 </ul>

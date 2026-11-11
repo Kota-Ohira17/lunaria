@@ -74,8 +74,8 @@ const base = z.object({
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
   /**
-   * 明細の金額が予算額と違うとき、予算の変更（②）も申請するか（任意。初めはしない）。
-   * 申請するときの理由（書かなければ、執行依頼の番号と金額から作る）
+   * 明細の金額が予算額と違うときは、予算の変更（②）を必ず申請する（requestBudgetChange は前の画面との互換のために残す。サーバーは見ない）。
+   * budgetChangeReason はその理由（金額が違う明細があるときは必須。執行依頼の番号と金額も自動で書き足す）
    */
   requestBudgetChange: z.boolean().default(false),
   budgetChangeReason: z.string().trim().max(1000).default(''),

@@ -1,9 +1,8 @@
 import { eq } from 'drizzle-orm'
 import { BUDGET_TERM } from '../../../../shared/constants'
-import { can } from '../../../../shared/roles'
 import { budgetChangeSchema } from '../../../../shared/schemas'
 
-/** 予算の変更（新規・変更・削除）。その担当の人は②に申請（承認待ち）、財務管理部はそのまま①に反映する */
+/** 予算の変更（新規・変更・削除。支出だけ）。その担当の人は②に申請（承認待ち）、承認する人（管理者と ZAI の zas）はそのまま①に反映する */
 export default defineEventHandler(async (event) => {
   const user = await requireUser(event)
   const body = parseOr400(budgetChangeSchema.safeParse(await readBody(event)))
@@ -20,7 +19,7 @@ export default defineEventHandler(async (event) => {
   const { row } = await checkChange(draft)
   await assertNoPending(row?.itemId ?? '')
 
-  const direct = can(user.role, 'reviewBudget')
+  const direct = await canApproveBudgetChange(user)
   const [change] = await useDb().insert(schema.budgetChangeRequests).values({
     id: newId(),
     term: BUDGET_TERM,

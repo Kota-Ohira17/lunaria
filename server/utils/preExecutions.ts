@@ -71,6 +71,17 @@ export async function preExecutionToLink(round: BudgetRound, team: BudgetTeam, i
 export const linkPreExecution = (id: number, itemId: string) =>
   useDb().update(e).set({ details: sql`json_set(${e.details}, '$.preExecutionItemId', ${itemId})` }).where(eq(e.id, id))
 
+/** 予算前執行と結んだ明細の内部 ID（本予算への付け替えがまだのもの）。集約では、この明細を修正・削除できない */
+export async function lockedPreExecutionItemIds() {
+  const rows = await useDb().select({ details: e.details }).from(e).where(waiting())
+  return new Set(rows.map(itemIdOf).filter(Boolean))
+}
+
+/** 予算前執行と結んだ明細なら 409 */
+export async function assertNotPreExecutionItem(itemId: string) {
+  if ((await lockedPreExecutionItemIds()).has(itemId)) throw createError({ statusCode: 409, message: '予算前執行の明細は、集約では修正・削除できません。' })
+}
+
 /** 集約を中止したとき：消した明細と結んでいた予算前執行を、未追加に戻す */
 export const unlinkPreExecutions = () =>
   useDb().update(e).set({ details: sql`json_remove(${e.details}, '$.preExecutionItemId')` }).where(waiting())

@@ -14,8 +14,8 @@ export default defineEventHandler(async (event) => {
 
   await db.batch([
     db.delete(schema.evidenceFiles).where(eq(schema.evidenceFiles.id, fileId)),
-    db.delete(schema.attachments).where(eq(schema.attachments.id, ev.attachmentId)),
     db.update(schema.entries).set({ evidenceCheckedAt: null, evidenceCheckedBy: null }).where(eq(schema.entries.id, id)),
   ])
+  await deleteAttachments([ev.attachmentId])
   return (await evidencesOf([id])).get(id) ?? []
 })

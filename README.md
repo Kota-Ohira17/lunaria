@@ -11,7 +11,7 @@
 | 証憑管理フォーム → `onFormSubmit`（`e.values[11][0] == "h"` で判定） | `/evidences/new` → `POST /api/evidences`（エンドポイントを分離） |
 | 形態別シート・番号順・申請順に**同じ行をコピー** | `entries` テーブル1つ。一覧は `/entries?view=number\|time\|振込\|…` で切り替え |
 | A列チェック → `onChange` がタイムスタンプで他シートの行を探して書き戻し | 「対応済みにする」ボタン → `POST /api/entries/:id/execute`（行は1つなので同期不要） |
-| `folderTable`（Drive フォルダIDのハードコード） | 添付ファイルは DB（`attachments` テーブル）に保存。フォルダ管理は不要 |
+| `folderTable`（Drive フォルダIDのハードコード） | 添付ファイルは委員会の共有ドライブの1つのフォルダに置き、`attachments` テーブルにリンクを持つ。フォルダIDは環境変数で1つだけ |
 | `ScriptProperties` の連番（ロックなし） | `counters` テーブルを `INSERT … ON CONFLICT DO UPDATE` で原子的に採番 |
 | n8n Webhook（口座情報も送信） | n8n Webhook（**口座情報は除外**、`X-Webhook-Secret` ヘッダ付き） |
 | `e.values[n]`（列番号依存） | zod スキーマで設問名ベースに検証 |
@@ -176,7 +176,17 @@ n8n では `event` が `overdue` のとき、`text` をそのまま Slack のチ
 ### 添付ファイルについて
 Vercel の関数は 4.5MB までしかリクエストを受け取れないため、添付は **4MB まで**。
 スマホ写真は送信前にブラウザで長辺 2000px の JPEG に縮小しています（`app/composables/useSubmit.ts`）。
-ファイルは Turso の `attachments` テーブルに入ります（無料枠 5GB。領収書なら数千枚は入る）。
+ファイルは委員会の共有ドライブ（Google ドライブ）のフォルダに置き、`attachments` テーブルにはファイル ID とリンクだけを持ちます。
+
+**Google ドライブの設定**（環境変数 `NUXT_GOOGLE_DRIVE_*`。3つとも入れたときだけドライブに置き、空なら今までどおり DB に保存）
+1. Google Cloud でプロジェクトを作り、Google Drive API を有効にする。
+2. サービスアカウントを作り、鍵（JSON）を作る。JSON の `client_email` を `NUXT_GOOGLE_DRIVE_SERVICE_ACCOUNT_EMAIL`、`private_key` を `NUXT_GOOGLE_DRIVE_SERVICE_ACCOUNT_KEY` に入れる（改行は `
+` のままでよい）。
+3. 委員会の**共有ドライブ**にフォルダを作り、共有ドライブのメンバーにサービスアカウントのメールを「コンテンツ管理者」で足す（サービスアカウントは自分のドライブに容量がないので、共有ドライブでないと上げられない）。
+4. フォルダの URL の末尾の ID を `NUXT_GOOGLE_DRIVE_FOLDER_ID` に入れる。
+5. 前から DB にある添付は、管理者が「ユーザー」画面の「ドライブに移行」で移す。
+
+画面からはアプリを通して開く（申請を見られる人だけ）。共有ドライブのメンバーは、証憑の横の「ドライブ」リンクからドライブで直接開ける。
 
 ## 本番に向けて残っていること
 - **既存データの移行**: スプレッドシートの「執行依頼」「証憑管理」シートから `entries` への取り込みスクリプト
