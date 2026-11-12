@@ -1,6 +1,6 @@
-# expenditure（財務管理システム）
+# lunaria（財務管理システム）
 
-五月祭常任委員会の財務管理システム（リポジトリ名: expenditure）。スプレッドシート「予算執行」＋ GAS（formSubmit.gs / onEdit.gs / constant.gs）で行っていた
+五月祭常任委員会の財務管理システム lunaria（リポジトリ名: expenditure）。スプレッドシート「予算執行」＋ GAS（formSubmit.gs / onEdit.gs / constant.gs）で行っていた
 執行依頼・証憑提出・台帳管理を Nuxt で置き換える試作です。
 
 ## 旧GASとの対応

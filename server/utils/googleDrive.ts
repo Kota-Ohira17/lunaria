@@ -43,7 +43,7 @@ async function accessToken() {
 /** ファイルをフォルダに上げ、ID とリンクを返す */
 export async function uploadToDrive(fileName: string, contentType: string, data: Buffer) {
   const config = driveConfig()!
-  const boundary = `----expenditure${Date.now().toString(36)}`
+  const boundary = `----lunaria${Date.now().toString(36)}`
   const metadata = JSON.stringify({ name: fileName, parents: [config.folderId] })
   const body = Buffer.concat([
     Buffer.from(`--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n${metadata}\r\n--${boundary}\r\nContent-Type: ${contentType}\r\n\r\n`),
