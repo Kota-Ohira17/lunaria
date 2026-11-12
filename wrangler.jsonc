@@ -1,0 +1,26 @@
+// Cloudflare Workers の設定（試験環境）。委員会の Cloudflare アカウントに載せる。
+// ビルドとデプロイ：npm run deploy:cloudflare ／ DB のマイグレーション：npm run db:migrate:d1
+// 秘密の値（NUXT_SESSION_PASSWORD など）は wrangler secret put で入れる（ここには書かない）
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "lunaria",
+  "account_id": "8b31f7d7c18d944605e2d5399b685625",
+  "main": ".output/server/index.mjs",
+  "assets": { "directory": ".output/public", "binding": "ASSETS" },
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "lunaria",
+      "database_id": "821fdb4d-22c6-4ccf-8961-d7d1d19918ce",
+      "migrations_dir": "server/db/migrations"
+    }
+  ],
+  "vars": {
+    "NUXT_ALLOWED_EMAIL_DOMAIN": "g.ecc.u-tokyo.ac.jp",
+    "NUXT_PUBLIC_TEST_LOGIN": "true",
+    "NUXT_PUBLIC_ENV_LABEL": "試験環境（Cloudflare）"
+  }
+}

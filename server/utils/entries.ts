@@ -47,11 +47,15 @@ export async function insertEntry(
   if (values.amount == null && lines.length && actuals.every(a => a != null)) {
     values = { ...values, amount: actuals.reduce((s, a) => s! + a!, 0) }
   }
-  return useDb().transaction(async (tx) => {
-    const [entry] = await tx.insert(schema.entries).values(values).returning()
-    const items = lines.length
-      ? await tx.insert(schema.entryItems).values(lines.map((l, i) => ({
-          entryId: entry!.id,
+  // D1 は対話的なトランザクションを使えないので、batch（まとめて1回で書く。途中で失敗したら全部取り消し）で書く。
+  // 明細の entry_id は、同じ batch で足した申請を番号（seq は一意）で引いて入れる
+  const db = useDb()
+  const entryIdOfSeq = sql`(select ${schema.entries.id} from ${schema.entries} where ${schema.entries.seq} = ${values.seq})`
+  const [[entry], items] = await db.batch([
+    db.insert(schema.entries).values(values).returning(),
+    ...(lines.length
+      ? [db.insert(schema.entryItems).values(lines.map((l, i) => ({
+          entryId: entryIdOfSeq as unknown as number,
           lineKey: l.key,
           itemId: l.itemId,
           itemNumber: l.itemNumber,
@@ -62,10 +66,10 @@ export async function insertEntry(
           actualQuantity: itemQuantities[l.key] ?? null,
           actualVendor: itemVendors[l.key] ?? null,
           actualAmount: actuals[i],
-        }))).returning()
-      : []
-    return { ...entry!, items }
-  })
+        }))).returning()]
+      : []),
+  ] as const) as unknown as [(typeof schema.entries.$inferSelect)[], EntryItem[] | undefined]
+  return { ...entry!, items: items ?? [] }
 }
 
 /**

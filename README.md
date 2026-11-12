@@ -108,6 +108,17 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 ローカルの DB（`file:` の SQLite）は初回起動時に `server/db/migrations` から自動で作成されます（既定は `.data/app.db`）。
 スキーマを変えたら `npm run db:generate` でマイグレーションを追加してください。
 
+## Cloudflare Workers + D1 へのデプロイ（試験）
+
+`wrangler.jsonc` に設定がある（Worker と D1 の名前は `lunaria`）。手元の Cloudflare 用ランタイム（workerd）は、Windows のアプリ制御ポリシーで止められることがあるので、確認は載せてから行う。
+
+1. `npx wrangler login` で Cloudflare にログインする（`wrangler.jsonc` の `account_id` のアカウント）
+2. 初めてのときだけ：`npx wrangler d1 create lunaria` で D1 を作って `database_id` を `wrangler.jsonc` に入れ、`npm run db:baseline:d1` で表を作る（今の表をまとめて作り、これまでのマイグレーションを適用済みとして記録する）
+3. 秘密の値（`NUXT_SESSION_PASSWORD`・`NUXT_ADMIN_EMAILS`・`NUXT_TEST_LOGIN_CODE`・`NUXT_TEST_ADMIN_CODE` など）を `.dev.vars`（git に入れない）に書き、`npx wrangler deploy --secrets-file .dev.vars` で一緒に入れる。2回目からは `npm run deploy:cloudflare`
+4. マイグレーションを足したら `npm run db:migrate:d1` で D1 に流す。D1 は `ALTER COLUMN` を使えないので、drizzle-kit が `ALTER COLUMN` を出したら、表の作り直しの SQL に書き換える
+- D1 は対話的なトランザクションを使えないので、まとめて書くところは `db.batch` にしている
+- Cron（期限切れのリマインド）は、まだ Cloudflare では動かしていない
+
 ## Vercel + Turso へのデプロイ
 
 1. **Turso** でデータベースを作り、URL（`libsql://…`）とトークンを用意する。Vercel のプロジェクトの「Storage」から Turso を追加してもよい（そのとき入る `TURSO_DATABASE_URL` / `TURSO_AUTH_TOKEN` もそのまま読むので、下の `NUXT_DATABASE_*` は要らない）

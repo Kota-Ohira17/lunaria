@@ -27,5 +27,6 @@ lunaria（財務管理システム。Nuxt・Drizzle・libsql）。どのPCで作
 
 ## 載せ先
 
-- Vercel（expenditure-o8y5.vercel.app）＋ Turso は試験環境。本番の載せ先は未定。
+- Vercel（expenditure-o8y5.vercel.app）＋ Turso と、Cloudflare Workers（lunaria.mf-lunaria.workers.dev）＋ D1 は試験環境。本番の載せ先は未定。
+- Cloudflare の D1 は対話的なトランザクション（`db.transaction`）を使えない。まとめて書くときは `db.batch` を使う。
 - 仕様書・説明では「試験環境」と書き、本番前提で書かない。載せ先に依存する設計（添付をディスクに置くなど）は避ける。

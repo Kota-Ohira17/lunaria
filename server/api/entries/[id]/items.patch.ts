@@ -1,4 +1,4 @@
-import { and, eq } from 'drizzle-orm'
+import { and, eq, sql } from 'drizzle-orm'
 import { itemsUpdateSchema } from '../../../../shared/schemas'
 
 /**
@@ -20,20 +20,23 @@ export default defineEventHandler(async (event) => {
   for (const [itemId, v] of Object.entries(quantities)) put(itemId, { actualQuantity: v || null })
   for (const [itemId, v] of Object.entries(vendors)) put(itemId, { actualVendor: v || null })
 
-  const [updated] = await db.transaction(async (tx) => {
-    for (const [itemId, change] of changes) {
-      await tx.update(schema.entryItems)
-        .set(change)
-        .where(and(eq(schema.entryItems.id, itemId), eq(schema.entryItems.entryId, id)))
-    }
-    const items = await tx.select().from(schema.entryItems).where(eq(schema.entryItems.entryId, id))
-    if (items.length && items.every(i => i.actualAmount != null)) {
-      await tx.update(schema.entries)
-        .set({ amount: items.reduce((s, i) => s + i.actualAmount!, 0) })
-        .where(eq(schema.entries.id, id))
-    }
-    return tx.select().from(schema.entries).where(eq(schema.entries.id, id))
-  })
+  // D1 は対話的なトランザクションを使えないので batch で書く。
+  // 全明細に執行額が入っていれば、申請の金額を合計にそろえる（入っていない明細があれば変えない）
+  const ei = schema.entryItems
+  const itemUpdates = [...changes].map(([itemId, change]) => db.update(ei).set(change).where(and(eq(ei.id, itemId), eq(ei.entryId, id))))
+  const results = await db.batch([
+    db.select({ id: ei.id }).from(ei).limit(0),
+    ...itemUpdates,
+    db.update(schema.entries)
+      .set({ amount: sql`(select sum(${ei.actualAmount}) from ${ei} where ${ei.entryId} = ${id})` })
+      .where(and(
+        eq(schema.entries.id, id),
+        sql`exists (select 1 from ${ei} where ${ei.entryId} = ${id})`,
+        sql`not exists (select 1 from ${ei} where ${ei.entryId} = ${id} and ${ei.actualAmount} is null)`,
+      )),
+    db.select().from(schema.entries).where(eq(schema.entries.id, id)),
+  ] as const)
+  const [updated] = results.at(-1) as (typeof schema.entries.$inferSelect)[]
   await syncVoucher('execution', id, user.email)
   const [withItemsEntry] = await withItems([updated!])
   return withItemsEntry
