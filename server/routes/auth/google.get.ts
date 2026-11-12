@@ -1,7 +1,7 @@
 export default defineOAuthGoogleEventHandler({
   config: {
     // Google のアカウント選択画面で ECC アカウントを優先表示する（検証はサーバー側で行う）
-    authorizationParams: { hd: useRuntimeConfig().allowedEmailDomain },
+    authorizationParams: { hd: serverConfig().allowedEmailDomain },
   },
   async onSuccess(event, { user }) {
     if (!user.email_verified || !isAllowedEmail(user.email)) {

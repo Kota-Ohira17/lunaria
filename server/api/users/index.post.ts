@@ -6,7 +6,7 @@ export default defineEventHandler(async (event) => {
   await requirePermission(event, 'manageUsers')
   const body = parseOr400(newUserSchema.safeParse(await readBody(event)))
   if (!isAllowedEmail(body.email)) {
-    throw createError({ statusCode: 400, message: `@${useRuntimeConfig().allowedEmailDomain} のアドレスを入力してください。` })
+    throw createError({ statusCode: 400, message: `@${serverConfig().allowedEmailDomain} のアドレスを入力してください。` })
   }
 
   const [created] = await useDb()

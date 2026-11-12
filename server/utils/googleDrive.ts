@@ -12,7 +12,7 @@ const UPLOAD_API = 'https://www.googleapis.com/upload/drive/v3/files'
 const SCOPE = 'https://www.googleapis.com/auth/drive'
 
 function driveConfig() {
-  const { googleDrive } = useRuntimeConfig()
+  const { googleDrive } = serverConfig()
   const key = String(googleDrive?.serviceAccountKey ?? '').replace(/\n/g, '\n')
   const email = String(googleDrive?.serviceAccountEmail ?? '')
   const folderId = String(googleDrive?.folderId ?? '')

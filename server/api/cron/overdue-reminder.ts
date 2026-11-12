@@ -10,7 +10,7 @@ import { shortenItemNumbers } from '../../../shared/itemNumbers'
  * - ?dryRun=1 なら Slack には送らず、送る予定の内容だけ返す
  */
 export default defineEventHandler(async (event) => {
-  const secret = useRuntimeConfig().cronSecret || process.env.CRON_SECRET || ''
+  const secret = serverConfig().cronSecret || process.env.CRON_SECRET || ''
   if (!secret) throw createError({ statusCode: 404 })
   const auth = getHeader(event, 'authorization') ?? ''
   if (auth !== `Bearer ${secret}` && getHeader(event, 'x-cron-secret') !== secret) {

@@ -22,14 +22,14 @@ function sameCode(input: string, expected: string) {
  * 両方 true のときはテスト公開用の制限がかかる。
  */
 export default defineEventHandler(async (event) => {
-  const { testLoginCode, testAdminCode, public: { devLogin, testLogin } } = useRuntimeConfig()
+  const { testLoginCode, testAdminCode, public: { devLogin, testLogin } } = serverConfig()
   if (!devLogin && !testLogin) throw createError({ statusCode: 404 })
 
   const { email, name, code } = parseOr400(bodySchema.safeParse(await readBody(event)))
 
   if (testLogin) {
     if (!isAllowedEmail(email)) {
-      throw createError({ statusCode: 400, message: `@${useRuntimeConfig().allowedEmailDomain} のメールアドレスで入ってください。` })
+      throw createError({ statusCode: 400, message: `@${serverConfig().allowedEmailDomain} のメールアドレスで入ってください。` })
     }
     // 合言葉が未設定のまま公開されても、誰も入れないようにする
     const asAdmin = !!testAdminCode && sameCode(code, testAdminCode)

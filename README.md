@@ -114,7 +114,8 @@ Google OAuth を用意していない場合は `.env` で `NUXT_PUBLIC_DEV_LOGIN
 
 1. `npx wrangler login` で Cloudflare にログインする（`wrangler.jsonc` の `account_id` のアカウント）
 2. 初めてのときだけ：`npx wrangler d1 create lunaria` で D1 を作って `database_id` を `wrangler.jsonc` に入れ、`npm run db:baseline:d1` で表を作る（今の表をまとめて作り、これまでのマイグレーションを適用済みとして記録する）
-3. 秘密の値（`NUXT_SESSION_PASSWORD`・`NUXT_ADMIN_EMAILS`・`NUXT_TEST_LOGIN_CODE`・`NUXT_TEST_ADMIN_CODE` など）を `.dev.vars`（git に入れない）に書き、`npx wrangler deploy --secrets-file .dev.vars` で一緒に入れる。2回目からは `npm run deploy:cloudflare`
+3. `npm run deploy:cloudflare` で載せる。秘密の値（`NUXT_SESSION_PASSWORD`・`NUXT_ADMIN_EMAILS`・`NUXT_TEST_LOGIN_CODE`・`NUXT_TEST_ADMIN_CODE` など）は、名前と値の JSON ファイルを作って `npx wrangler secret bulk <ファイル>` で入れる（`wrangler deploy --secrets-file` では値が入らなかった）。値の控えは `.dev.vars`（git に入れない）に置く
+- サーバーで設定を読むときは `useRuntimeConfig()` ではなく `serverConfig()`（`server/utils/config.ts`）を使う。リクエストの中なら、そのリクエストの環境変数から読む
 4. マイグレーションを足したら `npm run db:migrate:d1` で D1 に流す。D1 は `ALTER COLUMN` を使えないので、drizzle-kit が `ALTER COLUMN` を出したら、表の作り直しの SQL に書き換える
 - D1 は対話的なトランザクションを使えないので、まとめて書くところは `db.batch` にしている
 - Cron（期限切れのリマインド）は、まだ Cloudflare では動かしていない

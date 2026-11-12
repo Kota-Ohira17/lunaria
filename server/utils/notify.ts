@@ -49,7 +49,7 @@ export async function notifyN8n(event: NotifyEvent, entry: Entry) {
 
 /** n8n の Webhook に送る（未設定なら何もしない）。送れなかったときは例外を投げる */
 export async function postToN8n(body: Record<string, unknown>) {
-  const { n8nWebhookUrl, n8nWebhookSecret } = useRuntimeConfig()
+  const { n8nWebhookUrl, n8nWebhookSecret } = serverConfig()
   if (!n8nWebhookUrl) return false
   await $fetch(n8nWebhookUrl, {
     method: 'POST',

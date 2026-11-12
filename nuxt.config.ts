@@ -23,12 +23,14 @@ export default defineNuxtConfig({
   },
   nitro: forCloudflare
     ? {
+        // serverConfig() がリクエストの外の関数からも、そのリクエストの設定を読めるように（useEvent）
+        experimental: { asyncContext: true },
         // Workers では Node.js の一部の機能（crypto・Buffer など）を nodejs_compat で使う
         cloudflare: { nodeCompat: true },
         // Workers では libsql は動かない（DB は D1 を使う）ので、空の部品に差し替えて読み込みだけ通す
         alias: { '@libsql/client': fileURLToPath(new URL('./server/cloudflare/libsql-stub.mjs', import.meta.url)) },
       }
-    : {},
+    : { experimental: { asyncContext: true } },
   runtimeConfig: {
     // 環境変数 NUXT_DATABASE_URL などで上書きする（.env.example 参照）
     databaseUrl: 'file:.data/app.db',

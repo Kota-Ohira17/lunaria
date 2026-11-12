@@ -12,7 +12,7 @@ const SHEETS_API = 'https://sheets.googleapis.com/v4/spreadsheets'
 
 /** Google の許可をもらうのに必要な OAuth の設定（NUXT_OAUTH_GOOGLE_CLIENT_ID / _SECRET）があるか */
 export function sheetsOAuthConfigured() {
-  const { clientId, clientSecret } = useRuntimeConfig().oauth.google
+  const { clientId, clientSecret } = serverConfig().oauth.google
   return !!clientId && !!clientSecret
 }
 
