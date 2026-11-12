@@ -4,7 +4,7 @@ export default defineNuxtConfig({
   css: ['~/assets/main.css'],
   app: {
     head: {
-      title: '財務管理システム',
+      title: 'lunaria',
       htmlAttrs: { lang: 'ja' },
       link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     },

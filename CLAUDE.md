@@ -1,6 +1,6 @@
 # 作業のきまり
 
-財務管理システム（Nuxt・Drizzle・libsql）。どのPCで作業しても、このきまりに従う。
+lunaria（財務管理システム。Nuxt・Drizzle・libsql）。どのPCで作業しても、このきまりに従う。
 
 ## 変更の出し方
 
