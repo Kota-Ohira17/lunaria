@@ -7,7 +7,7 @@ lunaria（財務管理システム。Nuxt・Drizzle・libsql）。どのPCで作
 - ブランチは `local` と `main` の2本だけ。新しいブランチは作らない。
 - 作業前に `local` へ切り替えて `git pull origin main` で main を取り込む。`local` で commit・push して、`local` → `main` のプルリクエストを出す。`main` に直接 commit・push しない。
 - `local` の PR がまだ開いていれば、commit を積むだけで更新される。
-- PR のタイトルは短く単純に（例：「タブのアイコンを変更」）。本文は空にする（`gh pr create --title "…" --body ""`）。詳しい説明はチャットで伝える。
+- PR のタイトルは notation リポジトリと同じ形にする：`[種類] 内容`。種類は `feat`（機能の追加・変更）・`fix`（不具合の修正）・`chore`（名前・設定などの雑務）・`docs`（文書だけ）・`update`（依存の更新）・`add`（ファイルの追加）。内容は短く単純に（例：`[feat] 財務局長補佐の役職を追加`、`[fix] タブのアイコンを修正`）。本文は空にする（`gh pr create --title "…" --body ""`）。詳しい説明はチャットで伝える。
 - マージはユーザーがする。
 
 ## 画面の文言
