@@ -14,7 +14,7 @@ export default defineEventHandler(async (event) => {
     config: {
       scope: ['email', 'https://www.googleapis.com/auth/spreadsheets'],
       // 登録しているメールアドレスのアカウントを選んだ状態で開く
-      authorizationParams: { login_hint: me.email, hd: useRuntimeConfig().allowedEmailDomain },
+      authorizationParams: { login_hint: me.email, hd: serverConfig().allowedEmailDomain },
     },
     async onSuccess(event, { user, tokens }) {
       if (String(user.email ?? '').toLowerCase() !== me.email) {

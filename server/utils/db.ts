@@ -11,7 +11,7 @@ let db: ReturnType<typeof createDb> | undefined
  * Cloudflare Workers に載せたときは、これは使わず D1（バインディング DB）につなぐ（d1Binding）。
  */
 export function databaseConfig() {
-  const { databaseUrl, databaseAuthToken } = useRuntimeConfig()
+  const { databaseUrl, databaseAuthToken } = serverConfig()
   const fromTurso = databaseUrl.startsWith('file:') && process.env.TURSO_DATABASE_URL
   return fromTurso
     ? { url: process.env.TURSO_DATABASE_URL!, authToken: process.env.TURSO_AUTH_TOKEN || undefined }

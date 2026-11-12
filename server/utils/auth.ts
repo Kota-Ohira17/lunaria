@@ -5,7 +5,7 @@ import type { User } from '../db/schema'
 
 /** 環境変数 NUXT_ADMIN_EMAILS のユーザー。ログインのたびに管理者になる（最初の管理者を作るため） */
 export function isBootstrapAdmin(email: string) {
-  const { adminEmails } = useRuntimeConfig()
+  const { adminEmails } = serverConfig()
   return adminEmails
     .split(',')
     .map(e => e.trim().toLowerCase())
@@ -14,7 +14,7 @@ export function isBootstrapAdmin(email: string) {
 }
 
 export function isAllowedEmail(email: string) {
-  const { allowedEmailDomain } = useRuntimeConfig()
+  const { allowedEmailDomain } = serverConfig()
   return email.toLowerCase().endsWith(`@${allowedEmailDomain.toLowerCase()}`)
 }
 
