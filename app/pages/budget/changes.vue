@@ -1,17 +1,16 @@
 <script setup lang="ts">
-import { BUDGET_FLOWS, flowOf, type BudgetFlow } from '#shared/budgetCompile'
 /**
- * 予算の変更。集約とは別に、確定した予算の明細を直す・足す・消す。
- * 担当の人は自分の担当の明細について申請し、財務管理部が承認すると予算に反映される（却下には理由を書く）。
- * 財務管理部は直接変更できる（すぐ反映）。反映した変更は履歴に残る（だれが変えたかは出さない）。
+ * 予算の変更。集約とは別に、確定した予算の支出の明細を直す・足す・消す（収入の予算は集約で変える）。
+ * 担当の人は自分の担当の明細について申請し、管理者か ZAI の zas が承認すると予算に反映される（却下には理由を書く）。
+ * 承認する人は直接変更できる（すぐ反映）。反映した変更は履歴に残る（だれが変えたかは出さない）。
  * 集約中は変更できない（集約の明細で直す）。執行依頼で使われた明細は、削除ができない。
  */
 import type { BudgetItemInput } from '#shared/schemas'
 import { BUDGET_TERM } from '#shared/constants'
 
-const { can } = usePermissions()
-const reviewer = computed(() => can('reviewBudget'))
 const { data, refresh } = await useFetch('/api/budget/changes', { key: 'budget-changes' })
+/** 承認・却下と、直接の変更ができる人（管理者と ZAI の zas） */
+const reviewer = computed(() => !!data.value?.canApprove)
 
 type Change = NonNullable<typeof data.value>['changes'][number]
 type Item = NonNullable<typeof data.value>['items'][number]
@@ -74,8 +73,6 @@ const form = reactive({ teamId: '' as number | '', kind: 'edit' as 'edit' | 'add
 const myTeams = computed(() => (data.value?.teams ?? []).filter(t => data.value!.editableTeamIds.includes(t.id)))
 const teamItems = computed(() => (data.value?.items ?? []).filter(i => i.teamId === form.teamId))
 const teamKans = computed(() => [...new Set(teamItems.value.map(i => i.kan).filter(Boolean))])
-/** 収入・支出ごとの款（追加のときに選んだ側の款を出す。収入の項目番号は in から始まる） */
-const teamKansByFlow = computed(() => Object.fromEntries(BUDGET_FLOWS.map(f => [f, [...new Set(teamItems.value.filter(i => flowOf(i.number) === f).map(i => i.kan).filter(Boolean))]])) as Record<BudgetFlow, string[]>)
 const picked = computed(() => teamItems.value.find(i => i.number === form.itemNumber))
 const pendingOn = (i: Item) => data.value?.pendingItemNumbers.includes(i.number)
 watch(() => form.teamId, () => { form.itemNumber = '' })
@@ -106,7 +103,7 @@ async function send(values: BudgetItemInput | null) {
       method: 'POST',
       body: { kind: form.kind, teamId: form.teamId, itemNumber: form.kind === 'add' ? null : form.itemNumber, values, reason: form.reason },
     })
-    message.value = res.applied ? '予算を変更しました。執行依頼で選ぶ予算にもすぐ反映されています。' : '変更を申請しました。財務管理部の承認を待ってください。'
+    message.value = res.applied ? '予算を変更しました。執行依頼で選ぶ予算にもすぐ反映されています。' : '変更を申請しました。ZAI の zas の承認を待ってください。'
     creating.value = false
     Object.assign(form, { itemNumber: '', reason: '' })
     tab.value = res.applied ? 'approved' : 'pending'
@@ -120,7 +117,7 @@ async function send(values: BudgetItemInput | null) {
   }
 }
 
-/** 承認・却下（財務管理部）と取り下げ（申請した人） */
+/** 承認・却下（管理者と ZAI の zas）と取り下げ（申請した人） */
 const comments = reactive<Record<string, string>>({})
 const cardErrors = reactive<Record<string, string[]>>({})
 const busy = ref<string | null>(null)
@@ -155,7 +152,7 @@ function withdraw(c: Change) {
     </div>
     <p class="hint">
       集約とは別に、今の予算（{{ BUDGET_TERM }}）の項目を直す・足す・消すことができます。
-      {{ reviewer ? '財務管理部の変更はすぐ予算に反映されます。担当からの申請は、承認すると反映されます。' : '申請すると、財務管理部が承認したときに予算に反映されます。' }}
+      {{ reviewer ? 'あなたの変更はすぐ予算に反映されます。担当からの申請は、承認すると反映されます。収入の予算は、ここでは変えられません（集約で変えます）。' : '申請すると、ZAI の zas が承認したときに予算に反映されます。収入の予算は、ここでは変えられません（集約で変えます）。' }}
     </p>
     <p v-if="data?.round && !myTeams.length && !reviewer" class="card">あなたはまだ担当に割り当てられていないので、変更を申請できません。</p>
     <p v-if="message" class="ok">{{ message }}</p>
@@ -189,7 +186,7 @@ function withdraw(c: Change) {
 
       <template v-if="form.teamId !== ''">
         <BudgetItemForm
-          v-if="form.kind === 'add'" :key="`add-${form.teamId}`" :kans="teamKans" :kans-by-flow="teamKansByFlow" with-flow
+          v-if="form.kind === 'add'" :key="`add-${form.teamId}`" :kans="teamKans"
           :submit-label="reviewer ? '追加' : '追加を申請'" :pending="pending" @submit="send" @cancel="creating = false"
         />
         <BudgetItemForm
@@ -224,7 +221,7 @@ function withdraw(c: Change) {
       >
         <template #tags>
           <span class="tag fill" :class="{ red: c.kind === 'delete', green: c.kind === 'add' }">{{ KIND_LABELS[c.kind] }}</span>
-          <span v-if="c.direct" class="tag">財務管理部が直接変更</span>
+          <span v-if="c.direct" class="tag">直接変更</span>
           <span v-if="c.mine && !c.direct" class="tag">あなたの申請</span>
         </template>
         <!-- カードの中身は <p> の中に入るので、ブロックの要素は使わない -->

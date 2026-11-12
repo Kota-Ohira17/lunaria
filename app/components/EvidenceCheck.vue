@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 台帳で申請を開いたときの「証憑の確認」欄。
- * 対応済みで証憑が付くと確認待ちになり、財務局長・管理者が確認する（確認済み → 完了）か、理由を付けて差し戻す。
+ * 対応済みで証憑が付くと確認待ちになり、財務局長・財務局長補佐・管理者が確認する（確認済み → 完了）か、理由を付けて差し戻す。
  * 差し戻した理由はだれにでも見える。証憑を付け直すと、また確認待ちになる。
  */
 const props = defineProps<{
@@ -44,7 +44,7 @@ const dateTime = (d: string | Date) => new Date(d).toLocaleString('ja-JP', { tim
     <strong>証憑の確認</strong>
     <p v-if="checked" class="ok">確認済み（{{ dateTime(entry.evidenceCheckedAt!) }}）</p>
     <p v-else-if="returned" class="returned">差し戻し：{{ entry.evidenceReturnComment }}<br><small>証憑を付け直すと、また確認待ちになります。</small></p>
-    <p v-else-if="hasEvidence" class="hint">確認待ち（財務局長・管理者が証憑を確認します）</p>
+    <p v-else-if="hasEvidence" class="hint">確認待ち（財務局長・財務局長補佐・管理者が証憑を確認します）</p>
     <p v-else class="hint">証憑が提出されると、確認待ちになります。</p>
 
     <div v-if="can('executeEntries') && hasEvidence" class="actions">

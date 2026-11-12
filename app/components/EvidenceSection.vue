@@ -1,11 +1,11 @@
 <script setup lang="ts">
 /**
  * 台帳で申請を開いたときの「証憑」欄。付けた証憑の一覧と、証憑を付けるフォーム。
- * 証憑は誰でも、どの申請にも付けられる。外せるのは付けた本人と財務局長・管理者。
+ * 証憑は誰でも、どの申請にも付けられる。外せるのは付けた本人と財務局長・財務局長補佐・管理者。
  */
 import { EVIDENCE_KINDS, REFUND_TIMINGS } from '#shared/constants'
 
-type Evidence = { id: number, kind: string, amount: number | null, date: string | null, uploadedBy: string, fileName: string }
+type Evidence = { id: number, kind: string, amount: number | null, date: string | null, uploadedBy: string, fileName: string, driveUrl?: string | null }
 const props = defineProps<{
   entry: { id: number, type: string, kind: string, amount: number | null, applicantEmail: string, details: unknown, executedAt: string | Date | null, evidences: Evidence[] }
 }>()
@@ -66,6 +66,7 @@ const yen = (n: number | null) => (n == null ? '' : `¥${n.toLocaleString('ja-JP
       <li v-for="e in entry.evidences" :key="e.id">
         <a :href="`/api/entries/${entry.id}/evidences/${e.id}`" target="_blank" rel="noopener">{{ e.fileName }}</a>
         <small class="muted">{{ e.kind }}{{ e.amount != null ? `・${yen(e.amount)}` : '' }}{{ e.date ? `・${e.date}` : '' }}</small>
+        <a v-if="e.driveUrl" :href="e.driveUrl" target="_blank" rel="noopener" class="drive">ドライブ</a>
         <button v-if="canDelete(e)" type="button" class="link" @click="remove(e)">外す</button>
       </li>
     </ul>

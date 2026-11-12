@@ -74,8 +74,8 @@ const base = z.object({
   /** 1万円以上の増額のとき、役員会の承認を得たか（予算からの変更そのものはサーバーで金額から決める） */
   budgetCommitteeApproved: z.boolean().default(false),
   /**
-   * 明細の金額が予算額と違うとき、予算の変更（②）も申請するか（任意。初めはしない）。
-   * 申請するときの理由（書かなければ、執行依頼の番号と金額から作る）
+   * 明細の金額が予算額と違うときは、予算の変更（②）を必ず申請する（requestBudgetChange は前の画面との互換のために残す。サーバーは見ない）。
+   * budgetChangeReason はその理由（金額が違う明細があるときは必須。執行依頼の番号と金額も自動で書き足す）
    */
   requestBudgetChange: z.boolean().default(false),
   budgetChangeReason: z.string().trim().max(1000).default(''),
@@ -191,11 +191,11 @@ export const incomeFileSchema = z.object({
   kind: z.enum(INCOME_FILE_KINDS, { error: '証憑の種類を選んでください。' }),
 })
 
-/** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・管理者） */
+/** 入金を確かめた（done: true）／確認待ちに戻す（false）（財務局長・財務局長補佐・管理者） */
 export const incomeConfirmSchema = z.object({ done: z.boolean() })
 
 /**
- * 出納帳に手で書く記録（財務局長・管理者）。
+ * 出納帳に手で書く記録（財務局長・財務局長補佐・管理者）。
  * 期首の残高・残高の照合は口座のその日の残高、口座間の移動は移した額（移動元 → 移動先）、
  * 調整は増えたら正・減ったら負の額（利息・手数料など）。
  */
@@ -228,7 +228,7 @@ const journalLine = z.object({
   credit: z.coerce.number({ error: '貸方の金額を数字で入力してください。' }).int('整数で入力してください。').min(0).default(0),
 })
 
-/** 手で入れる仕訳（財務局長・管理者）。借方の合計と貸方の合計が同じで、0円でないこと */
+/** 手で入れる仕訳（財務局長・財務局長補佐・管理者）。借方の合計と貸方の合計が同じで、0円でないこと */
 export const manualJournalSchema = z.object({
   date,
   memo: required('摘要').pipe(z.string().max(500)),
@@ -254,7 +254,7 @@ export const evidenceUploadSchema = z.object({
 })
 export type EvidenceUploadInput = z.input<typeof evidenceUploadSchema>
 
-/** 証憑の確認（財務局長・管理者）。差し戻しは理由が必須 */
+/** 証憑の確認（財務局長・財務局長補佐・管理者）。差し戻しは理由が必須 */
 export const evidenceCheckSchema = z.discriminatedUnion('action', [
   z.object({ action: z.literal('confirm') }),
   z.object({ action: z.literal('undo') }),

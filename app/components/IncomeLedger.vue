@@ -1,7 +1,7 @@
 <script setup lang="ts">
 /**
  * 台帳の「収入」。記録された収入の一覧（だれでも見られる）。
- * 状態：確認待ち（記録された）→ 確認済み（財務局長・管理者が入金を確かめた）。確認待ちに戻すこともできる。
+ * 状態：確認待ち（記録された）→ 確認済み（財務局長・財務局長補佐・管理者が入金を確かめた）。確認待ちに戻すこともできる。
  * 行を開くと、詳しい内容・証憑（付ける・外す）・取り消しが出る。
  */
 import { INCOME_FILE_KINDS } from '#shared/constants'
@@ -105,6 +105,7 @@ const pathOf = (i: Income) => (i.details as { budgetPath?: { kan: string, kou: s
                   <li v-for="f in i.files" :key="f.id">
                     <a :href="`/api/incomes/${i.id}/files/${f.id}`" target="_blank" rel="noopener">{{ f.fileName }}</a>
                     <small class="muted">{{ f.kind }}</small>
+                    <a v-if="f.driveUrl" :href="f.driveUrl" target="_blank" rel="noopener" class="drive">ドライブ</a>
                     <button v-if="f.uploadedBy === user?.email || staff" type="button" class="link" @click="removeFile(i, f)">外す</button>
                   </li>
                 </ul>

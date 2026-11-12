@@ -135,8 +135,8 @@ function buildPayload() {
     budgetPath: form.budgetPath,
     itemName: form.itemName,
     budgetCommitteeApproved: budgetSummary.value?.change === LARGE_INCREASE && form.budgetCommitteeApproved,
-    requestBudgetChange: changedLines.value.length > 0 && form.requestBudgetChange,
-    budgetChangeReason: changedLines.value.length && form.requestBudgetChange ? form.budgetChangeReason : '',
+    requestBudgetChange: changedLines.value.length > 0,
+    budgetChangeReason: changedLines.value.length ? form.budgetChangeReason : '',
     remark: form.remark,
     preExecution: !!props.pre,
     preExecutionReason: props.pre ? form.preExecutionReason : '',
@@ -173,7 +173,7 @@ async function onSubmit() {
       <p>受け付けました（受付番号 {{ done }}）。</p>
       <template v-if="changeResult">
         <p v-if="changeResult.created.length">
-          予算の変更も申請しました（{{ changeResult.created.join('・') }}）。財務管理部が承認すると予算に反映されます。進み具合は「<NuxtLink to="/budget/changes">予算の変更</NuxtLink>」で見られます。
+          予算の変更も申請しました（{{ changeResult.created.join('・') }}）。ZAI の zas が承認すると予算に反映されます。進み具合は「<NuxtLink to="/budget/changes">予算の変更</NuxtLink>」で見られます。
         </p>
         <div v-if="changeResult.skipped.length" class="error">
           <p>次の項目は予算の変更を申請できませんでした。必要なら「予算の変更」から申請してください。</p>
@@ -272,7 +272,7 @@ async function onSubmit() {
           <label><span>振込先の口座番号<span class="req">*</span></span><input v-model="form.bank.accountNumber" inputmode="numeric" pattern="\d{1,8}" required></label>
           <label><span>振込先の口座名義<span class="req">*</span></span><input v-model="form.bank.accountName" required></label>
         </div>
-        <p class="hint">口座情報は財務局長・管理者だけが閲覧でき、Slack通知には含まれません。</p>
+        <p class="hint">口座情報は財務局長・財務局長補佐・管理者だけが閲覧でき、Slack通知には含まれません。</p>
         <label>備考<textarea v-model="form.remark" rows="3" /></label>
       </fieldset>
 
@@ -383,17 +383,15 @@ async function onSubmit() {
           <p v-if="budgetSummary.change === LARGE_INCREASE" class="hint">1万円以上の増額は、役員会の承認を得てから申請してください。</p>
 
           <div v-if="changedLines.length" class="change-request">
-            <span class="block-label">予算の変更（任意）</span>
-            <p class="hint">次の明細は、金額が予算額と違います。</p>
+            <span class="block-label">予算の変更<span class="req">*</span></span>
+            <p class="hint">次の明細は、金額が予算額と違います。この執行依頼と一緒に、予算の金額を執行額に直す予算の変更を申請します（ZAI の zas が承認すると予算に反映されます）。</p>
             <ul class="changed-lines">
               <li v-for="c in changedLines" :key="c.line.key">
                 <span class="muted">{{ c.line.itemNumber }}</span> {{ c.line.label }}：{{ formatYen(c.line.budgetAmount) }} → {{ formatYen(c.actual) }}
               </li>
             </ul>
-            <label class="check"><input v-model="form.requestBudgetChange" type="checkbox"> 予算の変更も申請する</label>
-            <p class="hint">チェックすると、この執行依頼と一緒に、予算の金額を執行額に直す予算の変更を申請します（財務管理部が承認すると予算に反映されます）。同じ項目をこのあとも執行するときなどに使ってください。ふつうは申請しなくてかまいません（予算との差は補正予算・決算で見ます）。</p>
-            <label v-if="form.requestBudgetChange">変更の理由<span class="hint">書かなければ、執行依頼の番号と金額を理由にします。</span>
-              <textarea v-model="form.budgetChangeReason" rows="2" />
+            <label>変更の理由<span class="req">*</span>
+              <textarea v-model.trim="form.budgetChangeReason" rows="2" required placeholder="例：見積もりより値上がりしたため" />
             </label>
           </div>
         </div>

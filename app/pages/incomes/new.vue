@@ -83,7 +83,7 @@ async function onSubmit() {
     <h1>収入の記録</h1>
 
     <div v-if="done.length" class="success">
-      <p>記録しました（{{ done.length > 1 ? `${done.length}件、番号 ${done.join('・')}` : `番号 ${done[0]}` }}）。財務局長・管理者が入金を確かめると、確認済みになります。</p>
+      <p>記録しました（{{ done.length > 1 ? `${done.length}件、番号 ${done.join('・')}` : `番号 ${done[0]}` }}）。財務局長・財務局長補佐・管理者が入金を確かめると、確認済みになります。</p>
       <NuxtLink :to="{ path: '/entries', query: { flow: 'income' } }">台帳（収入）へ</NuxtLink>
     </div>
 

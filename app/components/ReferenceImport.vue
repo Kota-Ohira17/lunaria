@@ -1,10 +1,10 @@
 <script setup lang="ts">
 /**
- * 昨年の本予算・決算の取り込み（集約の画面。管理者と、財務局長補佐（ZAI の zas）だけに出す）。支出は「支出」「支出詳細」シート、収入は「収入」「収入詳細」シートの CSV。
+ * 昨年の本予算・決算の取り込み（集約の画面。管理者と、ZAI の zas に割り当てられた人だけに出す）。支出は「支出」「支出詳細」シート、収入は「収入」「収入詳細」シートの CSV。
  * 取り込んだものは、本予算の集約のとき担当の画面に参考として出る（コピーして使える）。取り込み直すと入れ替わる。
  */
 const { data: files, refresh } = await useFetch('/api/budget/references', { default: () => [] })
-const { data: access } = await useFetch('/api/budget/access', { default: () => ({ canArrange: false }) })
+const { data: access } = await useFetch('/api/budget/access', { default: () => ({ canArrange: false, canImportReferences: false }) })
 const KINDS = [
   { kind: 'incomeBudget', label: '本予算（収入）', sheet: '「収入」シート' },
   { kind: 'incomeSettlement', label: '決算（収入）', sheet: '「収入詳細」シート' },
@@ -56,7 +56,7 @@ const when = (d: string | Date) => new Date(d).toLocaleString('ja-JP', { month: 
 </script>
 
 <template>
-  <div v-if="access.canArrange" class="card ref-import">
+  <div v-if="access.canImportReferences" class="card ref-import">
     <h2>昨年の本予算・決算の取り込み</h2>
     <p class="hint">本予算の集約では、ここで取り込んだ収入・支出の本予算と決算が担当の画面に参考として出て、各担当が選んでコピーできます。CSV（UTF-8 / Shift_JIS）で取り込みます。収入は項目番号が in から、支出は out から始まる明細だけを読みます。</p>
     <ul v-if="errors.length" class="error"><li v-for="e in errors" :key="e">{{ e }}</li></ul>

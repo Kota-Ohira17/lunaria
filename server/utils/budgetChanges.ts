@@ -1,13 +1,14 @@
 import { and, eq, or } from 'drizzle-orm'
 import { BUDGET_TERM } from '../../shared/constants'
+import { flowOf } from '../../shared/budgetCompile'
 import type { BudgetItemInput } from '../../shared/schemas'
 import type { BudgetChangeRequest, BudgetItemRow, BudgetLine, BudgetTeam } from '../db/schema'
 import type { SessionUser } from './auth'
 
 /**
  * ②予算変更申請DB。集約とは別に、今の予算（①の承認済みの最新の行）の項目を直す・足す・消す。
- * 申請 → 財務管理部が承認すると①に行を足す（作成者は承認した人）。補正予算の集約中は⑦にも行を足す。
- * 財務管理部は直接変更できる（申請と承認を同時に行った扱い）。足したら、執行依頼で選ぶ予算を作り直す。
+ * 支出の項目だけ（収入の予算は②を通さず、集約で変える）。申請 → 管理者か ZAI の zas が承認すると①に行を足す（作成者は承認した人）。補正予算の集約中は⑦にも行を足す。
+ * 承認する人は直接変更できる（申請と承認を同時に行った扱い）。足したら、執行依頼で選ぶ予算を作り直す。
  */
 
 /** 今の予算の局・担当（最新の確定した集約の局・担当）と、今の予算の項目 */
@@ -29,15 +30,21 @@ export async function isExecuted(row: Pick<BudgetItemRow, 'itemId' | 'itemNumber
   return !!income
 }
 
+const INCOME_NOT_CHANGEABLE = '収入の予算は、予算の変更では変えられません。本予算・補正予算の集約で変えてください。'
+
 /** 変更を確かめる（担当と項目があるか、執行依頼で使われていないか）。申請するときと反映するときに使う */
 export async function checkChange(change: { kind: BudgetChangeRequest['kind'], bureau: string, team: string, itemNumber: string, itemId?: string, after: unknown }) {
   const { teams, rows } = await currentBudget()
   const team = teams.find(t => t.bureau === change.bureau && t.team === change.team)
     ?? (rows.some(r => r.bureau === change.bureau && r.team === change.team) ? { bureauNo: '', bureau: change.bureau, team: change.team } as BudgetTeam : null)
   if (!team) throw createError({ statusCode: 404, message: '担当が見つかりません。' })
-  if (change.kind === 'add') return { team, row: null, rows }
+  if (change.kind === 'add') {
+    if ((change.after as { flow?: unknown } | null)?.flow === 'income') throw createError({ statusCode: 400, message: INCOME_NOT_CHANGEABLE })
+    return { team, row: null, rows }
+  }
   const row = rows.find(r => (change.itemId ? r.itemId === change.itemId : r.itemNumber === change.itemNumber) && r.bureau === change.bureau && r.team === change.team)
   if (!row) throw createError({ statusCode: 404, message: '変える項目が予算に見つかりません（ほかの変更で消えた可能性があります）。' })
+  if (flowOf(row.itemNumber) === 'income') throw createError({ statusCode: 400, message: INCOME_NOT_CHANGEABLE })
   if (change.kind === 'delete' && await isExecuted(row)) {
     throw createError({ statusCode: 409, message: 'この項目は執行依頼で使われているので、削除できません。' })
   }

@@ -72,7 +72,7 @@ const notCopiedOf = (sec: (typeof refSections.value)[number]) => notCopied(sec.k
 /** はじめは、まだ明細がないときだけ開いておく */
 const refOpen = ref(items.value.length === 0)
 const copy = (ids: number[]) => run(() => $fetch(`/api/budget/teams/${teamId}/copy`, { method: 'POST', body: { ids } }), `${ids.length}件コピーしました。内容を確認してから提出してください。`)
-const canChange = (i: BudgetItemView) => editable.value && (reviewer.value
+const canChange = (i: BudgetItemView) => editable.value && !i.locked && (reviewer.value
   || (phase.value === 'collecting' && i.status !== 'submitted')
   || (phase.value === 'reviewing' && (i.status === 'returned' || i.status === 'draft')))
 /** 提出できる件数（未提出・要修正。集約終了の間は0） */
@@ -163,7 +163,7 @@ function addFromPre(p: PreExecution) {
 
       <section v-if="preExecutions.length" class="pre-list" :class="{ todo: preNotAdded }">
         <h2>予算前執行 <span class="muted">{{ preExecutions.length }}件<template v-if="preNotAdded">・未追加 {{ preNotAdded }}件</template></span></h2>
-        <p class="hint">この担当の予算前執行です。「明細に追加」で今年の明細にして、ほかの明細と同じように提出してください。明細にしておくと、本予算の確定のときにその明細へ付け替えます。</p>
+        <p class="hint">この担当の予算前執行です。「明細に追加」で今年の明細にして、ほかの明細と同じように提出してください。明細にしておくと、本予算の確定のときにその明細へ付け替えます。明細にしたあとは修正・削除できないので、款・金額をよく確かめてから追加してください。</p>
         <div class="table-wrap">
           <table>
             <thead><tr><th>番号</th><th>支出項目名</th><th class="num">金額</th><th>理由</th><th>明細</th></tr></thead>
@@ -290,7 +290,7 @@ function addFromPre(p: PreExecution) {
             取り込んである昨年の本予算と決算です（収入の本予算：{{ refFile('incomeBudget')?.fileName || '未取り込み' }} ／ 収入の決算：{{ refFile('incomeSettlement')?.fileName || '未取り込み' }} ／ 支出の本予算：{{ refFile('budget')?.fileName || '未取り込み' }} ／ 支出の決算：{{ refFile('settlement')?.fileName || '未取り込み' }}）。
             使える明細はコピーして、内容を確認してから提出してください（コピーしなくても、「明細の追加」で一から入れられます）。決算は項目番号で本予算の明細に合わせています。
           </p>
-          <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。管理者か財務局長補佐（ZAI の zas）が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
+          <p v-if="!reference.files.length" class="hint">まだ取り込まれていません。管理者か、ZAI の zas に割り当てられた人が「集約」の画面で昨年の本予算・決算を取り込むと、ここに出ます。</p>
           <p v-else-if="!reference.items.length" class="hint">取り込んだ本予算・決算に、この担当（{{ team.bureau }} ／ {{ team.team }}）の明細はありません。</p>
           <template v-for="sec in refSections" :key="sec.flow">
           <div class="flow-head ref-flow-head" :class="sec.flow">

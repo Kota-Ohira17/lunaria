@@ -1,7 +1,7 @@
 import { eq } from 'drizzle-orm'
 import { incomeConfirmSchema } from '../../../../shared/schemas'
 
-/** 入金を確かめた（確認済み）／確認待ちに戻す（財務局長・管理者） */
+/** 入金を確かめた（確認済み）／確認待ちに戻す（財務局長・財務局長補佐・管理者） */
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'executeEntries')
   const id = Number(getRouterParam(event, 'id'))

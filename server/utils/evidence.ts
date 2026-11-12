@@ -5,7 +5,7 @@ import type { Entry } from '../db/schema'
 
 type SessionUser = { email: string, role: Parameters<typeof can>[0] }
 
-/** 付けた証憑を消せるか（付けた本人か、財務局長・管理者） */
+/** 付けた証憑を消せるか（付けた本人か、財務局長・財務局長補佐・管理者） */
 export function canDeleteEvidence(user: SessionUser, file: { uploadedBy: string }) {
   return file.uploadedBy === user.email || can(user.role, 'executeEntries')
 }
@@ -50,6 +50,7 @@ export async function evidencesOf(entryIds: number[]) {
       uploadedBy: ev.uploadedBy,
       createdAt: ev.createdAt,
       fileName: schema.attachments.fileName,
+      driveUrl: schema.attachments.driveUrl,
     })
     .from(ev)
     .innerJoin(schema.attachments, eq(schema.attachments.id, ev.attachmentId))
@@ -67,6 +68,8 @@ export type EvidenceView = {
   uploadedBy: string
   createdAt: Date
   fileName: string
+  /** Google ドライブのリンク（ドライブに置いていなければ null） */
+  driveUrl: string | null
 }
 
 /** 申請の一覧に証憑の一覧を付ける */

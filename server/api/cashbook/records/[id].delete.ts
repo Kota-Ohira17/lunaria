@@ -1,6 +1,6 @@
 import { eq } from 'drizzle-orm'
 
-/** 出納帳に手で書いた記録を取り消す（財務局長・管理者） */
+/** 出納帳に手で書いた記録を取り消す（財務局長・財務局長補佐・管理者） */
 export default defineEventHandler(async (event) => {
   const user = await requirePermission(event, 'manageCashbook')
   const id = Number(getRouterParam(event, 'id'))
