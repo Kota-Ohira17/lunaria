@@ -7,7 +7,7 @@ export default defineEventHandler(async (event) => {
   const tables = await buildSettlementTables(getRequestURL(event).origin)
 
   const wb = new ExcelJS.Workbook()
-  wb.creator = 'lunaria'
+  wb.creator = '財務管理システム'
   wb.created = new Date()
   for (const t of tables) writeTable(wb, t)
 

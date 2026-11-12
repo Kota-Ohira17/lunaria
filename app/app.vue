@@ -37,7 +37,7 @@ function isActive(to: string) {
     </div>
 
     <header class="topbar">
-      <NuxtLink to="/" class="brand">lunaria</NuxtLink>
+      <NuxtLink to="/" class="brand">財務管理システム</NuxtLink>
       <span v-if="loggedIn" class="role-badge">{{ roleLabel }}</span>
       <div v-if="loggedIn" class="me">
         <!-- 名前・アイコンから自分の通知設定を開く -->

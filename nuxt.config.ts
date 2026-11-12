@@ -9,7 +9,7 @@ export default defineNuxtConfig({
   css: ['~/assets/main.css'],
   app: {
     head: {
-      title: 'lunaria',
+      title: '財務管理システム',
       htmlAttrs: { lang: 'ja' },
       link: [{ rel: 'icon', type: 'image/svg+xml', href: '/favicon.svg' }],
     },
