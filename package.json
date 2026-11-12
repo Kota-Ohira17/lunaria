@@ -11,7 +11,11 @@
     "db:generate": "drizzle-kit generate",
     "typecheck": "nuxt typecheck",
     "build:vercel": "drizzle-kit migrate && nuxt build",
-    "db:migrate": "drizzle-kit migrate"
+    "db:migrate": "drizzle-kit migrate",
+    "build:cloudflare": "nuxt build --preset cloudflare-module",
+    "deploy:cloudflare": "npm run build:cloudflare && wrangler deploy",
+    "db:migrate:d1": "wrangler d1 migrations apply lunaria --remote",
+    "db:baseline:d1": "wrangler d1 execute lunaria --remote --file server/db/d1-baseline.sql"
   },
   "dependencies": {
     "@libsql/client": "^0.18.0",
@@ -26,7 +30,8 @@
     "@types/feather-icons": "^4.29.4",
     "drizzle-kit": "^0.31.11",
     "typescript": "~5.9",
-    "vue-tsc": "^3.3.12"
+    "vue-tsc": "^3.3.12",
+    "wrangler": "^4.160.1"
   },
   "engines": {
     "node": "24.x"

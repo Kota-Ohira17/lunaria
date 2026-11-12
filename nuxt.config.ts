@@ -1,3 +1,8 @@
+import { fileURLToPath } from 'node:url'
+
+/** Cloudflare Workers 向けにビルドするとき（npm run build:cloudflare = nuxt build --preset cloudflare-module） */
+const forCloudflare = process.env.NITRO_PRESET?.startsWith('cloudflare') || process.argv.includes('cloudflare-module')
+
 export default defineNuxtConfig({
   compatibilityDate: '2026-10-01',
   modules: ['nuxt-auth-utils'],
@@ -16,6 +21,14 @@ export default defineNuxtConfig({
     // スマホ確認用の一時URL（Cloudflare のクイックトンネル）からのアクセスを通す
     vite: { server: { allowedHosts: ['.trycloudflare.com'] } },
   },
+  nitro: forCloudflare
+    ? {
+        // Workers では Node.js の一部の機能（crypto・Buffer など）を nodejs_compat で使う
+        cloudflare: { nodeCompat: true },
+        // Workers では libsql は動かない（DB は D1 を使う）ので、空の部品に差し替えて読み込みだけ通す
+        alias: { '@libsql/client': fileURLToPath(new URL('./server/cloudflare/libsql-stub.mjs', import.meta.url)) },
+      }
+    : {},
   runtimeConfig: {
     // 環境変数 NUXT_DATABASE_URL などで上書きする（.env.example 参照）
     databaseUrl: 'file:.data/app.db',
